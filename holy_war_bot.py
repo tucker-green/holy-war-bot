@@ -494,7 +494,7 @@ class HolyWarBot:
             return False
     
     async def buy_elixirs(self):
-        """Buy elixirs if gold > threshold"""
+        """Buy elixirs if gold > threshold. Prioritize most expensive first."""
         logger.info("Buying elixirs...")
         
         # Navigate to elixirs shop
@@ -509,58 +509,101 @@ class HolyWarBot:
             
         # Keep buying the most expensive elixir we can afford until we're close to min_gold_reserve
         bought_something = False
+        purchases = 0
         
-        while current_gold > self.min_gold_reserve + 50:  # Keep some buffer
+        while current_gold > self.min_gold_reserve + 30:  # Keep buffer for plundering
             try:
-                # Find all buy buttons and their prices
-                # Look for elixirs and their prices in the page
+                # Get page content to parse elixir costs and availability
                 content = await self.page.content()
+                import re
                 
-                # Try to find and click buy buttons for expensive elixirs
-                # Blessed Elixir (450 gold) -> Baptised Elixir (90) -> Consecrated Elixir (50)
+                # Find all forms that submit to /town/alchemist/buy/
+                # Each form contains an elixir with its cost and buy button
+                forms = re.findall(
+                    r'<form[^>]*action="/town/alchemist/buy/[^"]*"[^>]*>(.*?)</form>',
+                    content,
+                    re.DOTALL
+                )
                 
-                if current_gold >= 450:
-                    # Try to buy Blessed Elixir
-                    try:
-                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Blessed Elixir"))')
-                        await asyncio.sleep(1)
-                        bought_something = True
-                        current_gold -= 450
-                        logger.info(f"Bought Blessed Elixir for 450 gold. Remaining: {current_gold}")
+                # Parse elixir costs and check if buy button is available
+                elixirs = []
+                for i, form in enumerate(forms):
+                    # Extract elixir name
+                    name_match = re.search(r'<th>\s*(.*?)\s*</th>', form)
+                    if not name_match:
                         continue
-                    except:
-                        pass
-                        
-                if current_gold >= 90:
-                    # Try to buy Baptised Elixir
-                    try:
-                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Baptised Elixir"))')
-                        await asyncio.sleep(1)
-                        bought_something = True
-                        current_gold -= 90
-                        logger.info(f"Bought Baptised Elixir for 90 gold. Remaining: {current_gold}")
+                    elixir_name = name_match.group(1).strip()
+                    
+                    # Extract cost
+                    cost_match = re.search(r'<td class="ltr"[^>]*><b><span>(\d+)</span></b></td>', form)
+                    if not cost_match:
                         continue
-                    except:
-                        pass
-                        
-                if current_gold >= 50:
-                    # Try to buy Consecrated Elixir
-                    try:
-                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Consecrated Elixir"))')
-                        await asyncio.sleep(1)
-                        bought_something = True
-                        current_gold -= 50
-                        logger.info(f"Bought Consecrated Elixir for 50 gold. Remaining: {current_gold}")
-                        continue
-                    except:
-                        pass
-                        
-                # If we get here, we couldn't buy anything
-                break
+                    cost = int(cost_match.group(1))
+                    
+                    # Check if buy button is available (not disabled)
+                    # A disabled button shows btn_kaufen_x.jpg, an active one shows btn_kaufen.jpg
+                    has_buy_button = 'btn_kaufen.jpg' in form and 'btn_kaufen_x.jpg' not in form
+                    
+                    if has_buy_button:
+                        elixirs.append({
+                            'name': elixir_name,
+                            'cost': cost,
+                            'form_index': i
+                        })
+                        logger.debug(f"Found available elixir: {elixir_name} ({cost} gold)")
                 
+                if not elixirs:
+                    logger.info("No elixirs available to buy")
+                    break
+                
+                # Sort by cost descending (buy most expensive first)
+                elixirs.sort(key=lambda x: x['cost'], reverse=True)
+                
+                # Try to buy the most expensive elixir we can afford
+                bought_this_round = False
+                for elixir in elixirs:
+                    if current_gold >= elixir['cost'] and (current_gold - elixir['cost']) >= self.min_gold_reserve:
+                        logger.info(f"Attempting to buy {elixir['name']} for {elixir['cost']} gold...")
+                        
+                        # Find and click the buy button for this elixir
+                        # Look for the button within the form that contains this elixir name
+                        buy_buttons = await self.page.locator('button[type="submit"][name="No alternative text available"]').all()
+                        
+                        if elixir['form_index'] < len(buy_buttons):
+                            # Click the corresponding buy button
+                            await buy_buttons[elixir['form_index']].click()
+                            await asyncio.sleep(2)
+                            
+                            # Check if gold decreased
+                            new_gold = await self.get_current_gold()
+                            if new_gold < current_gold:
+                                logger.info(f"✓ Bought {elixir['name']} for {elixir['cost']} gold. Remaining: {new_gold}")
+                                current_gold = new_gold
+                                bought_something = True
+                                bought_this_round = True
+                                purchases += 1
+                                break
+                            else:
+                                logger.warning(f"Buy button clicked but gold didn't decrease. Current: {new_gold}")
+                                break
+                        else:
+                            logger.warning(f"Could not find buy button for {elixir['name']}")
+                            break
+                
+                if not bought_this_round:
+                    # Couldn't afford any elixir or no more available
+                    break
+                    
             except Exception as e:
                 logger.error(f"Error buying elixirs: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
                 break
+        
+        if bought_something:
+            logger.info(f"Purchased {purchases} elixir(s). Final gold: {current_gold}")
+        else:
+            logger.info(f"No elixirs purchased. Gold: {current_gold}")
                 
         return bought_something
         
