@@ -246,6 +246,39 @@ class BotDashboard:
         # Stats labels (will be populated)
         self.stats_labels = {}
         
+        # Initialize with empty stats
+        self._add_stats_section("💰 Gold", [
+            "Earned: 0g",
+            "Spent: 0g",
+            "Net: 0g",
+            "On Stats: 0g",
+            "On Elixirs: 0g"
+        ])
+        self._add_stats_section("⬆️ Stat Upgrades", [
+            "Strength: 0x",
+            "Attack: 0x",
+            "Defence: 0x",
+            "Agility: 0x",
+            "Stamina: 0x",
+            "Total: 0 trainings"
+        ])
+        self._add_stats_section("🧪 Elixirs", [
+            "Consecrated (50g): 0x = 0g",
+            "Baptised (90g): 0x = 0g",
+            "Blessed (450g): 0x = 0g"
+        ])
+        self._add_stats_section("⚔️ Combat", [
+            "Victories: 0",
+            "Defeats: 0",
+            "Win Rate: 0.0%"
+        ])
+        self._add_stats_section("📊 Activity", [
+            "Plunders: 0",
+            "Plunder Time: 0.0h",
+            "Attacks: 0",
+            "Training Sessions: 0"
+        ])
+        
         # Last Update
         self.update_time_label = tk.Label(
             self.root,
