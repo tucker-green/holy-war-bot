@@ -1023,18 +1023,7 @@ async def main():
 
 if __name__ == "__main__":
     import threading
-    import os
-    
-    # Suppress macOS Tk deprecation warning
-    os.environ['TK_SILENCE_DEPRECATION'] = '1'
-    
-    # Start dashboard in main thread
-    dashboard = get_dashboard()
-    dashboard.update_status("Starting")
-    dashboard.update_action("Initializing...")
-    
-    # Force initial render
-    dashboard.root.update()
+    from bot_dashboard import run_dashboard
     
     # Run bot in background thread
     def run_bot():
@@ -1043,6 +1032,6 @@ if __name__ == "__main__":
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
     
-    # Run dashboard in main thread (required for macOS)
-    dashboard.run()
+    # Run Kivy dashboard in main thread
+    run_dashboard()
 

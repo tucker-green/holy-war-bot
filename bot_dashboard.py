@@ -1,23 +1,32 @@
 """
-Bot Dashboard GUI
+Bot Dashboard GUI - Kivy Implementation
 Displays real-time stats and progress for the Holy War Bot
 """
 
-import tkinter as tk
-from tkinter import ttk
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.progressbar import ProgressBar
+from kivy.clock import Clock
+from kivy.core.window import Window
 from datetime import datetime
 import threading
 
 
-class BotDashboard:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Holy War Bot Dashboard")
-        self.root.geometry("450x800+0+0")  # Increased size for stats
-        self.root.configure(bg='#1e1e1e')
+class BotDashboard(BoxLayout):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.padding = 10
+        self.spacing = 10
         
-        # Keep window on top
-        self.root.attributes('-topmost', True)
+        # Set dark background
+        with self.canvas.before:
+            from kivy.graphics import Color, Rectangle
+            Color(0.12, 0.12, 0.12, 1)  # Dark gray
+            self.rect = Rectangle(size=self.size, pos=self.pos)
+            self.bind(size=self._update_rect, pos=self._update_rect)
         
         # Data storage
         self.data = {
@@ -37,216 +46,152 @@ class BotDashboard:
         }
         
         self.create_widgets()
-        
-        # Force initial render
-        self.root.update_idletasks()
-        
+    
+    def _update_rect(self, instance, value):
+        self.rect.pos = instance.pos
+        self.rect.size = instance.size
+    
     def create_widgets(self):
         """Create all GUI widgets"""
         # Title
-        title = tk.Label(
-            self.root,
-            text="⚔️ HOLY WAR BOT ⚔️",
-            font=('Arial', 18, 'bold'),
-            bg='#1e1e1e',
-            fg='#00ff00'
+        title = Label(
+            text='[color=00ff00]⚔️ HOLY WAR BOT ⚔️[/color]',
+            markup=True,
+            font_size='24sp',
+            size_hint=(1, None),
+            height=50
         )
-        title.pack(pady=10)
+        self.add_widget(title)
         
-        # Status Frame
-        status_frame = tk.LabelFrame(
-            self.root,
-            text="Status",
-            font=('Arial', 12, 'bold'),
-            bg='#2d2d2d',
-            fg='#ffffff',
-            padx=10,
-            pady=10
+        # Status
+        self.status_label = Label(
+            text='[color=00ff00]Status: Starting...[/color]',
+            markup=True,
+            font_size='14sp',
+            size_hint=(1, None),
+            height=30
         )
-        status_frame.pack(fill='x', padx=10, pady=5)
+        self.add_widget(self.status_label)
         
-        self.status_label = tk.Label(
-            status_frame,
-            text="Status: Starting...",
-            font=('Arial', 11),
-            bg='#2d2d2d',
-            fg='#00ff00',
-            anchor='w'
+        self.action_label = Label(
+            text='[color=cccccc]Action: Initializing...[/color]',
+            markup=True,
+            font_size='12sp',
+            size_hint=(1, None),
+            height=25
         )
-        self.status_label.pack(fill='x')
+        self.add_widget(self.action_label)
         
-        self.action_label = tk.Label(
-            status_frame,
-            text="Action: Initializing...",
-            font=('Arial', 10),
-            bg='#2d2d2d',
-            fg='#cccccc',
-            anchor='w'
+        # Gold & Level
+        self.gold_label = Label(
+            text='[color=ffd700]💰 Gold: 0[/color]',
+            markup=True,
+            font_size='14sp',
+            size_hint=(1, None),
+            height=30
         )
-        self.action_label.pack(fill='x', pady=(5, 0))
+        self.add_widget(self.gold_label)
         
-        # Gold & Level Frame
-        info_frame = tk.LabelFrame(
-            self.root,
-            text="Character Info",
-            font=('Arial', 12, 'bold'),
-            bg='#2d2d2d',
-            fg='#ffffff',
-            padx=10,
-            pady=10
+        self.level_label = Label(
+            text='[color=00d4ff]⭐ Level: 1[/color]',
+            markup=True,
+            font_size='14sp',
+            size_hint=(1, None),
+            height=30
         )
-        info_frame.pack(fill='x', padx=10, pady=5)
+        self.add_widget(self.level_label)
         
-        gold_frame = tk.Frame(info_frame, bg='#2d2d2d')
-        gold_frame.pack(fill='x')
-        
-        tk.Label(
-            gold_frame,
-            text="💰 Gold:",
-            font=('Arial', 11, 'bold'),
-            bg='#2d2d2d',
-            fg='#ffd700'
-        ).pack(side='left')
-        
-        self.gold_label = tk.Label(
-            gold_frame,
-            text="0",
-            font=('Arial', 11),
-            bg='#2d2d2d',
-            fg='#ffd700'
+        # Stats
+        stats_label = Label(
+            text='[color=ffffff][b]Stats[/b][/color]',
+            markup=True,
+            font_size='14sp',
+            size_hint=(1, None),
+            height=25
         )
-        self.gold_label.pack(side='left', padx=5)
-        
-        level_frame = tk.Frame(info_frame, bg='#2d2d2d')
-        level_frame.pack(fill='x', pady=(5, 0))
-        
-        tk.Label(
-            level_frame,
-            text="⭐ Level:",
-            font=('Arial', 11, 'bold'),
-            bg='#2d2d2d',
-            fg='#00d4ff'
-        ).pack(side='left')
-        
-        self.level_label = tk.Label(
-            level_frame,
-            text="1",
-            font=('Arial', 11),
-            bg='#2d2d2d',
-            fg='#00d4ff'
-        )
-        self.level_label.pack(side='left', padx=5)
-        
-        # Stats Frame
-        stats_frame = tk.LabelFrame(
-            self.root,
-            text="Stats",
-            font=('Arial', 12, 'bold'),
-            bg='#2d2d2d',
-            fg='#ffffff',
-            padx=10,
-            pady=10
-        )
-        stats_frame.pack(fill='x', padx=10, pady=5)
+        self.add_widget(stats_label)
         
         self.stat_labels = {}
-        stats = ['Strength', 'Attack', 'Defence', 'Agility', 'Stamina']
-        
+        stats = ['strength', 'attack', 'defence', 'agility', 'stamina']
         for stat in stats:
-            frame = tk.Frame(stats_frame, bg='#2d2d2d')
-            frame.pack(fill='x', pady=2)
-            
-            tk.Label(
-                frame,
-                text=f"{stat}:",
-                font=('Arial', 10),
-                bg='#2d2d2d',
-                fg='#cccccc',
-                width=10,
-                anchor='w'
-            ).pack(side='left')
-            
-            value_label = tk.Label(
-                frame,
-                text="0",
-                font=('Arial', 10, 'bold'),
-                bg='#2d2d2d',
-                fg='#ffffff'
+            label = Label(
+                text=f'[color=cccccc]{stat.capitalize()}: 0[/color]',
+                markup=True,
+                font_size='12sp',
+                size_hint=(1, None),
+                height=20
             )
-            value_label.pack(side='left')
-            
-            self.stat_labels[stat.lower()] = value_label
+            self.add_widget(label)
+            self.stat_labels[stat] = label
         
-        # Plunder Frame
-        plunder_frame = tk.LabelFrame(
-            self.root,
-            text="Plunder",
-            font=('Arial', 12, 'bold'),
-            bg='#2d2d2d',
-            fg='#ffffff',
-            padx=10,
-            pady=10
+        # Plunder
+        plunder_label = Label(
+            text='[color=ffffff][b]Plunder[/b][/color]',
+            markup=True,
+            font_size='14sp',
+            size_hint=(1, None),
+            height=25
         )
-        plunder_frame.pack(fill='x', padx=10, pady=5)
+        self.add_widget(plunder_label)
         
-        self.plunder_time_label = tk.Label(
-            plunder_frame,
-            text="Time Remaining: 0 min",
-            font=('Arial', 10),
-            bg='#2d2d2d',
-            fg='#cccccc'
+        self.plunder_time_label = Label(
+            text='[color=cccccc]Time Remaining: 0 min[/color]',
+            markup=True,
+            font_size='12sp',
+            size_hint=(1, None),
+            height=20
         )
-        self.plunder_time_label.pack()
+        self.add_widget(self.plunder_time_label)
         
         # Progress Bar
-        self.progress = ttk.Progressbar(
-            plunder_frame,
-            mode='determinate',
-            length=300
+        self.progress_bar = ProgressBar(
+            max=100,
+            size_hint=(1, None),
+            height=20
         )
-        self.progress.pack(pady=5)
+        self.add_widget(self.progress_bar)
         
-        self.progress_label = tk.Label(
-            plunder_frame,
-            text="0%",
-            font=('Arial', 10),
-            bg='#2d2d2d',
-            fg='#cccccc'
+        self.progress_label = Label(
+            text='[color=cccccc]0%[/color]',
+            markup=True,
+            font_size='12sp',
+            size_hint=(1, None),
+            height=20
         )
-        self.progress_label.pack()
+        self.add_widget(self.progress_label)
         
-        # Statistics Frame (Scrollable)
-        stats_frame = tk.LabelFrame(
-            self.root,
-            text="Session Statistics",
-            font=('Arial', 12, 'bold'),
-            bg='#2d2d2d',
-            fg='#ffffff',
-            padx=10,
-            pady=10
+        # Session Statistics (Scrollable)
+        stats_title = Label(
+            text='[color=ffffff][b]Session Statistics[/b][/color]',
+            markup=True,
+            font_size='14sp',
+            size_hint=(1, None),
+            height=30
         )
-        stats_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        self.add_widget(stats_title)
         
-        # Create scrollable canvas for stats
-        canvas = tk.Canvas(stats_frame, bg='#2d2d2d', highlightthickness=0)
-        scrollbar = tk.Scrollbar(stats_frame, orient='vertical', command=canvas.yview)
-        self.stats_content = tk.Frame(canvas, bg='#2d2d2d')
+        # Scrollable stats content
+        scroll_view = ScrollView(size_hint=(1, 1))
+        self.stats_content = BoxLayout(orientation='vertical', size_hint_y=None, spacing=5)
+        self.stats_content.bind(minimum_height=self.stats_content.setter('height'))
+        scroll_view.add_widget(self.stats_content)
+        self.add_widget(scroll_view)
         
-        self.stats_content.bind(
-            '<Configure>',
-            lambda e: canvas.configure(scrollregion=canvas.bbox('all'))
+        # Initialize stats display
+        self._init_stats_display()
+        
+        # Last update
+        self.update_time_label = Label(
+            text='[color=888888]Last update: --:--:--[/color]',
+            markup=True,
+            font_size='10sp',
+            size_hint=(1, None),
+            height=20
         )
-        
-        canvas.create_window((0, 0), window=self.stats_content, anchor='nw')
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side='left', fill='both', expand=True)
-        scrollbar.pack(side='right', fill='y')
-        
-        # Stats labels (will be populated)
-        self.stats_labels = {}
-        
-        # Initialize with empty stats
+        self.add_widget(self.update_time_label)
+    
+    def _init_stats_display(self):
+        """Initialize statistics with default values"""
         self._add_stats_section("💰 Gold", [
             "Earned: 0g",
             "Spent: 0g",
@@ -278,76 +223,107 @@ class BotDashboard:
             "Attacks: 0",
             "Training Sessions: 0"
         ])
-        
-        # Last Update
-        self.update_time_label = tk.Label(
-            self.root,
-            text="Last update: --:--:--",
-            font=('Arial', 9),
-            bg='#1e1e1e',
-            fg='#888888'
+    
+    def _add_stats_section(self, title, items):
+        """Add a section of stats"""
+        # Section title
+        title_label = Label(
+            text=f'[color=00d4ff][b]{title}[/b][/color]',
+            markup=True,
+            font_size='12sp',
+            size_hint_y=None,
+            height=25
         )
-        self.update_time_label.pack(side='bottom', pady=5)
+        self.stats_content.add_widget(title_label)
         
+        # Items
+        for item in items:
+            item_label = Label(
+                text=f'[color=cccccc]  {item}[/color]',
+                markup=True,
+                font_size='11sp',
+                size_hint_y=None,
+                height=20
+            )
+            self.stats_content.add_widget(item_label)
+    
     def update_status(self, status):
         """Update bot status"""
         self.data['status'] = status
-        self.status_label.config(text=f"Status: {status}")
+        Clock.schedule_once(lambda dt: self._do_update_status(status))
+    
+    def _do_update_status(self, status):
+        self.status_label.text = f'[color=00ff00]Status: {status}[/color]'
         self._update_time()
-        
+    
     def update_action(self, action):
         """Update current action"""
         self.data['current_action'] = action
-        self.action_label.config(text=f"Action: {action}")
+        Clock.schedule_once(lambda dt: self._do_update_action(action))
+    
+    def _do_update_action(self, action):
+        self.action_label.text = f'[color=cccccc]Action: {action}[/color]'
         self._update_time()
-        
+    
     def update_gold(self, gold):
         """Update gold amount"""
         self.data['gold'] = gold
-        self.gold_label.config(text=str(gold))
+        Clock.schedule_once(lambda dt: self._do_update_gold(gold))
+    
+    def _do_update_gold(self, gold):
+        self.gold_label.text = f'[color=ffd700]💰 Gold: {gold}[/color]'
         self._update_time()
-        
+    
     def update_level(self, level):
         """Update level"""
         self.data['level'] = level
-        self.level_label.config(text=str(level))
+        Clock.schedule_once(lambda dt: self._do_update_level(level))
+    
+    def _do_update_level(self, level):
+        self.level_label.text = f'[color=00d4ff]⭐ Level: {level}[/color]'
         self._update_time()
-        
+    
     def update_stats(self, **stats):
         """Update character stats"""
+        Clock.schedule_once(lambda dt: self._do_update_stats(stats))
+    
+    def _do_update_stats(self, stats):
         for stat, value in stats.items():
             if stat in self.stat_labels:
                 self.data['stats'][stat] = value
-                self.stat_labels[stat].config(text=str(value))
+                self.stat_labels[stat].text = f'[color=cccccc]{stat.capitalize()}: {value}[/color]'
         self._update_time()
-        
+    
     def update_plunder_time(self, minutes):
         """Update plunder time remaining"""
         self.data['plunder_time_remaining'] = minutes
-        self.plunder_time_label.config(text=f"Time Remaining: {minutes} min")
+        Clock.schedule_once(lambda dt: self._do_update_plunder_time(minutes))
+    
+    def _do_update_plunder_time(self, minutes):
+        self.plunder_time_label.text = f'[color=cccccc]Time Remaining: {minutes} min[/color]'
         self._update_time()
-        
+    
     def update_plunder_progress(self, current, total):
         """Update plunder progress bar"""
+        Clock.schedule_once(lambda dt: self._do_update_plunder_progress(current, total))
+    
+    def _do_update_plunder_progress(self, current, total):
         if total > 0:
             percentage = (current / total) * 100
-            self.progress['value'] = percentage
-            self.progress_label.config(text=f"{percentage:.0f}%")
+            self.progress_bar.value = percentage
+            self.progress_label.text = f'[color=cccccc]{percentage:.0f}%[/color]'
         else:
-            self.progress['value'] = 0
-            self.progress_label.config(text="0%")
+            self.progress_bar.value = 0
+            self.progress_label.text = '[color=cccccc]0%[/color]'
         self._update_time()
-        
-    def _update_time(self):
-        """Update last update timestamp"""
-        self.data['last_update'] = datetime.now().strftime('%H:%M:%S')
-        self.update_time_label.config(text=f"Last update: {self.data['last_update']}")
     
     def update_statistics(self, stats_data):
         """Update the statistics display"""
+        Clock.schedule_once(lambda dt: self._do_update_statistics(stats_data))
+    
+    def _do_update_statistics(self, stats_data):
         # Clear existing stats
-        for widget in self.stats_content.winfo_children():
-            widget.destroy()
+        self.stats_content.clear_widgets()
         
         # Gold Summary
         self._add_stats_section("💰 Gold", [
@@ -394,65 +370,45 @@ class BotDashboard:
         
         self._update_time()
     
-    def _add_stats_section(self, title, items):
-        """Add a section of stats"""
-        # Section title
-        title_label = tk.Label(
-            self.stats_content,
-            text=title,
-            font=('Arial', 10, 'bold'),
-            bg='#2d2d2d',
-            fg='#00d4ff',
-            anchor='w'
-        )
-        title_label.pack(fill='x', pady=(5, 2))
-        
-        # Items
-        for item in items:
-            item_label = tk.Label(
-                self.stats_content,
-                text=f"  {item}",
-                font=('Arial', 9),
-                bg='#2d2d2d',
-                fg='#cccccc',
-                anchor='w'
-            )
-            item_label.pack(fill='x', pady=1)
-        
-        # Separator
-        separator = tk.Frame(self.stats_content, height=1, bg='#444444')
-        separator.pack(fill='x', pady=5)
-        
-    def start(self):
-        """Start the dashboard in the main thread"""
-        # This should be called from the main thread
-        pass
+    def _update_time(self):
+        """Update last update timestamp"""
+        self.data['last_update'] = datetime.now().strftime('%H:%M:%S')
+        self.update_time_label.text = f'[color=888888]Last update: {self.data["last_update"]}[/color]'
     
-    def run(self):
-        """Run the dashboard mainloop (must be called from main thread)"""
-        self.root.mainloop()
-        
     def update_in_thread(self, func):
         """Schedule an update in the main thread"""
-        self.root.after(0, func)
-        
-    def stop(self):
-        """Stop the dashboard"""
-        try:
-            self.root.quit()
-            self.root.destroy()
-        except:
-            pass
+        Clock.schedule_once(lambda dt: func())
 
 
-# Singleton instance
+class DashboardApp(App):
+    def build(self):
+        Window.size = (450, 800)
+        Window.clearcolor = (0.12, 0.12, 0.12, 1)
+        self.dashboard = BotDashboard()
+        return self.dashboard
+    
+    def get_dashboard(self):
+        return self.dashboard
+
+
+# Global app instance
+_app_instance = None
 _dashboard_instance = None
 
 
 def get_dashboard():
     """Get or create the dashboard instance"""
-    global _dashboard_instance
-    if _dashboard_instance is None:
-        _dashboard_instance = BotDashboard()
+    global _app_instance, _dashboard_instance
+    if _app_instance is None:
+        _app_instance = DashboardApp()
+        # Build the app but don't run it yet
+        _app_instance.build()
+        _dashboard_instance = _app_instance.dashboard
     return _dashboard_instance
 
+
+def run_dashboard():
+    """Run the dashboard app (must be called from main thread)"""
+    global _app_instance
+    if _app_instance:
+        _app_instance.run()
