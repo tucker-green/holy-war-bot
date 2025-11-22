@@ -6,7 +6,7 @@ Automates gameplay including plundering, training, buying elixirs, and attacking
 import asyncio
 import time
 from datetime import datetime, timedelta
-from playwright.async_api import async_playwright, Page, Browser
+from playwright.async_api import async_playwright, Page, Browser, Playwright
 import logging
 import config
 
@@ -26,6 +26,8 @@ class HolyWarBot:
         self.base_url = "https://www.holy-war.net"
         self.page: Page = None
         self.browser: Browser = None
+        self.playwright: Playwright = None
+        self.context = None
         
         # Configuration
         self.min_gold_reserve = 10
@@ -41,16 +43,64 @@ class HolyWarBot:
         
     async def start(self, headless=False):
         """Initialize browser and start bot"""
-        playwright = await async_playwright().start()
-        self.browser = await playwright.chromium.launch(headless=headless)
-        self.page = await self.browser.new_page()
-        
-        logger.info("Bot started")
+        try:
+            logger.info("Starting Playwright...")
+            self.playwright = await async_playwright().start()
+            
+            logger.info("Launching Firefox browser...")
+            # Launch browser with minimal options first
+            # Using Firefox instead of Chromium due to macOS compatibility issues
+            self.browser = await self.playwright.firefox.launch(
+                headless=headless,
+                timeout=60000  # 60 second timeout
+            )
+            
+            logger.info("Creating browser context...")
+            # Create a browser context explicitly with network settings
+            self.context = await self.browser.new_context(
+                viewport={'width': 1280, 'height': 720},
+                ignore_https_errors=True,
+                java_script_enabled=True
+            )
+            
+            logger.info("Creating new page...")
+            # Create page from context
+            self.page = await self.context.new_page()
+            
+            # Test that page is working by navigating to a simple page
+            logger.info("Testing page navigation...")
+            await self.page.goto("about:blank", timeout=10000)
+            
+            logger.info("Bot started successfully")
+        except Exception as e:
+            logger.error(f"Failed to start browser: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Cleanup on failure
+            await self._cleanup()
+            raise
+    
+    async def _cleanup(self):
+        """Internal cleanup method"""
+        try:
+            if self.context:
+                await self.context.close()
+        except:
+            pass
+        try:
+            if self.browser:
+                await self.browser.close()
+        except:
+            pass
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+        except:
+            pass
         
     async def stop(self):
         """Close browser and cleanup"""
-        if self.browser:
-            await self.browser.close()
+        await self._cleanup()
         logger.info("Bot stopped")
         
     async def login(self):
@@ -81,29 +131,31 @@ class HolyWarBot:
     async def get_current_gold(self) -> int:
         """Get current gold amount from the status bar"""
         try:
-            # Look for the gold indicator in the status bar
-            # The gold is in a cell next to the gold image
+            # First try: Use the spMoney span (most reliable)
+            gold_span = self.page.locator('#spMoney')
+            if await gold_span.count() > 0:
+                text = await gold_span.text_content()
+                if text and text.strip().isdigit():
+                    gold = int(text.strip())
+                    logger.info(f"Current gold: {gold}")
+                    return gold
+            
+            # Fallback: Look for the gold indicator in the status bar
             gold_cells = await self.page.locator('td:has(img[name*="Gold"]), td:has(img[alt*="Gold"])').all()
             
             for cell in gold_cells:
                 text = await cell.text_content()
                 if text and text.strip().isdigit():
                     gold = int(text.strip())
-                    logger.info(f"Current gold: {gold}")
+                    logger.info(f"Current gold (fallback method): {gold}")
                     return gold
-                    
-            # Alternative: look for cells near the gold image
-            page_content = await self.page.content()
-            import re
-            # Look for pattern like Christian 14 100 1 where 14 is gold
-            match = re.search(r'Chri\s*tian\s+(\d+)\s+\d+\s+\d+', page_content)
-            if match:
-                gold = int(match.group(1))
-                logger.info(f"Current gold (alt method): {gold}")
-                return gold
                 
         except Exception as e:
             logger.error(f"Error getting gold: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+        
+        logger.warning("Could not detect gold, returning 0")
         return 0
         
     async def get_plunder_time_remaining(self) -> int:
@@ -138,15 +190,16 @@ class HolyWarBot:
             logger.warning(f"Not enough plunder time remaining ({self.plunder_time_remaining} min)")
             return False
             
-        # Look for plunder duration radio button (10 minutes)
         try:
-            # Click the 10-minute plunder option
-            await self.page.click(f'input[type="radio"][value="{self.plunder_duration_minutes}"]')
+            # Select the plunder duration from the dropdown
+            logger.info(f"Selecting {self.plunder_duration_minutes} minute plunder duration...")
+            await self.page.select_option('select[name="ravageTime"]', str(self.plunder_duration_minutes))
             await asyncio.sleep(1)
             
             # Click the plunder button
-            await self.page.click('input[type="image"][name="b1"], input[type="submit"][value*="Plunder"]')
-            await asyncio.sleep(2)
+            logger.info("Clicking plunder button...")
+            await self.page.click('button[name="PLUNDER_ACTION"]')
+            await asyncio.sleep(3)
             
             self.last_plunder_time = datetime.now()
             self.plunder_time_remaining -= self.plunder_duration_minutes
@@ -157,32 +210,38 @@ class HolyWarBot:
             
         except Exception as e:
             logger.error(f"Error during plunder: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
             
-    async def get_training_cost(self):
-        """Try to determine the training cost from the page"""
+    async def get_training_costs(self):
+        """Get the actual training cost for each stat from the page"""
         try:
-            # Training cost is usually displayed near the train button
-            # Look for numbers in cells or text near the training section
-            content = await self.page.content()
+            costs = []
             
-            # For level 1, training typically costs 1 gold per stat point
-            # As level increases, cost increases
-            # For now, we'll estimate based on pattern or default to 1
+            # Find all train button rows
+            train_buttons = await self.page.locator('img[alt="Train"]').all()
             
-            # Try to find cost indicators in the page
-            import re
-            # Look for patterns like "Cost: X" or numbers near "Train"
-            cost_patterns = re.findall(r'(?:Cost|cost):\s*(\d+)', content)
-            if cost_patterns:
-                return int(cost_patterns[0])
+            for btn in train_buttons:
+                # Navigate up to the row, then find the cost
+                # The cost is in <td class="ltr"><b>XX</b></td>
+                row = btn.locator('xpath=ancestor::tr[1]')
+                cost_cell = row.locator('td.ltr b')
+                cost_text = await cost_cell.text_content()
+                cost = int(cost_text.strip())
+                costs.append(cost)
+                
+            if costs:
+                logger.info(f"Training costs found: {costs}")
+                return costs
             
-            # Default assumption: 1 gold at low levels
-            return 1
+            # Default if we can't find any
+            logger.warning("Could not find training costs, using default [1]")
+            return [1]
             
         except Exception as e:
-            logger.warning(f"Could not determine training cost: {e}. Assuming 1 gold.")
-            return 1
+            logger.warning(f"Error getting training costs: {e}. Using default [1]")
+            return [1]
     
     async def train_attributes(self):
         """Train attributes with available gold, keeping minimum reserve"""
@@ -196,32 +255,56 @@ class HolyWarBot:
         trained_something = False
         training_count = 0
         
-        # Get the estimated training cost
-        training_cost = await self.get_training_cost()
-        logger.info(f"Estimated training cost: {training_cost} gold per training")
-        
         # Keep training while we have enough gold above minimum
         while training_count < 50:  # Max 50 trainings per cycle
             try:
-                # Check if we have enough gold to train and still keep reserve
-                if current_gold - training_cost <= self.min_gold_reserve:
-                    logger.info(f"Insufficient gold to train. Current: {current_gold}, Cost: {training_cost}, Reserve: {self.min_gold_reserve}")
-                    logger.info(f"Would have {current_gold - training_cost} gold after training, need > {self.min_gold_reserve}")
+                # Get current training costs for all available stats
+                training_costs = await self.get_training_costs()
+                
+                if not training_costs:
+                    logger.info("No training buttons found (all stats maxed)")
                     break
                 
-                # Get the current page to check for training buttons
-                train_buttons = await self.page.locator('img[alt="Train"], img[name="Train"]').all()
+                # Stat order: Strength (0), Attack (1), Defence (2), Agility (3), Stamina (4)
+                strength_cost = training_costs[0] if len(training_costs) > 0 else None
+                min_cost = min(training_costs)
+                cheapest_index = training_costs.index(min_cost)
                 
-                if not train_buttons:
-                    logger.info("No more training buttons found (all stats maxed)")
+                # Decide which stat to train: prioritize Strength, then cheapest
+                train_index = None
+                train_cost = None
+                
+                if strength_cost and current_gold - strength_cost > self.min_gold_reserve:
+                    # Can afford Strength, train it
+                    train_index = 0
+                    train_cost = strength_cost
+                    logger.info(f"Training STRENGTH (priority): costs {strength_cost} gold")
+                elif current_gold - min_cost > self.min_gold_reserve:
+                    # Can't afford Strength but can afford cheapest
+                    train_index = cheapest_index
+                    train_cost = min_cost
+                    stat_names = ["Strength", "Attack", "Defence", "Agility", "Stamina"]
+                    stat_name = stat_names[cheapest_index] if cheapest_index < len(stat_names) else f"stat #{cheapest_index}"
+                    logger.info(f"Training {stat_name} (cheapest): costs {min_cost} gold")
+                else:
+                    # Can't afford any training
+                    logger.info(f"Insufficient gold to train. Current: {current_gold}, Min cost: {min_cost}, Reserve: {self.min_gold_reserve}")
+                    logger.info(f"Would have {current_gold - min_cost} gold after training, need > {self.min_gold_reserve}")
+                    break
+                
+                # Get the train buttons
+                train_buttons = await self.page.locator('img[alt="Train"]').all()
+                
+                if train_index >= len(train_buttons):
+                    logger.error(f"Train button index {train_index} out of range")
                     break
                 
                 # We have enough gold, proceed with training
-                logger.info(f"Gold check passed: {current_gold} - {training_cost} = {current_gold - training_cost} > {self.min_gold_reserve}")
+                logger.info(f"Gold check passed: {current_gold} - {train_cost} = {current_gold - train_cost} > {self.min_gold_reserve}")
                 
-                # Click the first available train button
-                await train_buttons[0].click()
-                await asyncio.sleep(2)
+                # Click the selected train button
+                await train_buttons[train_index].click()
+                await asyncio.sleep(3)
                 
                 # Check if we're still on the attributes page or if we got an error
                 current_url = self.page.url
@@ -229,6 +312,9 @@ class HolyWarBot:
                     # We might have been redirected, go back
                     await self.page.goto(f"{self.base_url}/char/attributes/?w={self.world}")
                     await asyncio.sleep(2)
+                else:
+                    # Page might need a moment to update the gold display
+                    await asyncio.sleep(0.5)
                 
                 # Update gold
                 new_gold = await self.get_current_gold()
@@ -243,15 +329,12 @@ class HolyWarBot:
                 trained_something = True
                 training_count += 1
                 
-                # Update our cost estimate based on actual cost
-                if actual_cost != training_cost:
-                    logger.info(f"Training cost was {actual_cost}, not {training_cost}. Updating estimate.")
-                    training_cost = actual_cost
-                
                 logger.info(f"Training #{training_count} - Cost: {actual_cost} gold. Remaining gold: {current_gold}")
                     
             except Exception as e:
                 logger.error(f"Error during training: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
                 break
                 
         if trained_something:
@@ -440,13 +523,15 @@ class HolyWarBot:
             else:
                 # Training buttons exist but we stopped training because of gold reserve
                 # Check the training cost again
-                training_cost = await self.get_training_cost()
-                if current_gold - training_cost <= self.min_gold_reserve:
-                    # Can't train without going below reserve, buy elixirs
-                    logger.info(f"Can't train (would leave {current_gold - training_cost} gold, need > {self.min_gold_reserve}). Buying elixirs...")
-                    await self.buy_elixirs()
-                else:
-                    logger.info("Can still train. Not buying elixirs yet.")
+                training_costs = await self.get_training_costs()
+                if training_costs:
+                    min_training_cost = min(training_costs)
+                    if current_gold - min_training_cost <= self.min_gold_reserve:
+                        # Can't train without going below reserve, buy elixirs
+                        logger.info(f"Can't train (would leave {current_gold - min_training_cost} gold, need > {self.min_gold_reserve}). Buying elixirs...")
+                        await self.buy_elixirs()
+                    else:
+                        logger.info("Can still train. Not buying elixirs yet.")
                 
         return True
         
@@ -458,22 +543,23 @@ class HolyWarBot:
             await asyncio.sleep(2)
         
         current_gold = await self.get_current_gold()
-        training_cost = await self.get_training_cost()
         
-        # Also check if there are training buttons available
-        train_buttons = await self.page.locator('img[alt="Train"], img[name="Train"]').all()
-        has_training_available = len(train_buttons) > 0
+        # Get all training costs
+        training_costs = await self.get_training_costs()
+        has_training_available = len(training_costs) > 0
         
-        # Check: current_gold - training_cost > min_gold_reserve?
-        can_train = (current_gold - training_cost) > self.min_gold_reserve and has_training_available
+        if not has_training_available:
+            logger.info("Cannot train: No training buttons available (all stats maxed)")
+            return False
+        
+        # Check if we can afford the cheapest training option
+        min_training_cost = min(training_costs)
+        can_train = (current_gold - min_training_cost) > self.min_gold_reserve
         
         if can_train:
-            logger.info(f"Can train: {current_gold} - {training_cost} = {current_gold - training_cost} > {self.min_gold_reserve}")
+            logger.info(f"Can train: {current_gold} - {min_training_cost} = {current_gold - min_training_cost} > {self.min_gold_reserve}")
         else:
-            if not has_training_available:
-                logger.info("Cannot train: No training buttons available (all stats maxed)")
-            else:
-                logger.info(f"Cannot train: {current_gold} - {training_cost} = {current_gold - training_cost} <= {self.min_gold_reserve}")
+            logger.info(f"Cannot train: {current_gold} - {min_training_cost} = {current_gold - min_training_cost} <= {self.min_gold_reserve}")
         
         return can_train
     
