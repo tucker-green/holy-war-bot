@@ -41,7 +41,8 @@ async def wait_with_progress_bar(minutes: int, description: str, total_duration_
         with tqdm(total=total_seconds, desc=description, unit="s", 
                  bar_format='║ {desc}: {bar} {percentage:3.0f}% | {elapsed}/{total}s ║',
                  initial=elapsed_seconds,
-                 ncols=78) as pbar:
+                 ncols=78,
+                 leave=True) as pbar:
             for i in range(wait_seconds):
                 await asyncio.sleep(1)
                 pbar.update(1)
@@ -49,13 +50,14 @@ async def wait_with_progress_bar(minutes: int, description: str, total_duration_
         # Standard progress bar (0% to 100% for the wait time)
         with tqdm(total=wait_seconds, desc=description, unit="s", 
                  bar_format='║ {desc}: {bar} {percentage:3.0f}% | {n_fmt}/{total_fmt}s ║',
-                 ncols=78) as pbar:
+                 ncols=78,
+                 leave=True) as pbar:
             for i in range(wait_seconds):
                 await asyncio.sleep(1)
                 pbar.update(1)
     
-    # Print bottom border
-    print("="*80 + "\n")
+    # Print bottom border (after progress bar completes)
+    print("="*80)
 
 
 class HolyWarBot:
