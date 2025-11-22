@@ -8,7 +8,7 @@ WORLD = "17IN"              # Your world (e.g., "17IN" for International World 1
 
 # Gold management
 MIN_GOLD_RESERVE = 10       # Minimum gold to keep at all times
-ELIXIR_THRESHOLD = 65       # Buy elixirs when gold exceeds this (and can't train)
+ELIXIR_THRESHOLD = 100      # Buy elixirs when gold exceeds this (and can't train)
 
 # Plunder settings
 PLUNDER_DURATION_MINUTES = 10  # Duration of each plunder (10, 20, 30, 40, 50, or 60)

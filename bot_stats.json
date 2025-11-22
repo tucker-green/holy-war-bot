@@ -1,0 +1,35 @@
+{
+  "session_start": "2025-11-21T21:28:02.383121",
+  "total_gold_earned": 0,
+  "total_gold_spent": 324,
+  "gold_spent_on_stats": 324,
+  "gold_spent_on_elixirs": 0,
+  "stat_upgrades": {
+    "strength": 0,
+    "attack": 1,
+    "defence": 1,
+    "agility": 1,
+    "stamina": 1
+  },
+  "elixirs_purchased": {
+    "consecrated": {
+      "count": 0,
+      "total_cost": 0
+    },
+    "baptised": {
+      "count": 0,
+      "total_cost": 0
+    },
+    "blessed": {
+      "count": 0,
+      "total_cost": 0
+    }
+  },
+  "plunder_count": 2,
+  "plunder_total_minutes": 20,
+  "attack_count": 0,
+  "victories": 0,
+  "defeats": 0,
+  "training_sessions": 2,
+  "total_trainings": 4
+}

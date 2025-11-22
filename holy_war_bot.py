@@ -10,8 +10,6 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 import logging
 import config
 from tqdm import tqdm
-from bot_dashboard import get_dashboard
-from bot_stats import get_stats
 
 # Setup logging
 logging.basicConfig(
@@ -21,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def wait_with_progress_bar(minutes: int, description: str, total_duration_minutes: int = None, dashboard=None):
+async def wait_with_progress_bar(minutes: int, description: str, total_duration_minutes: int = None):
     """Wait with a visual progress bar showing remaining time
     
     Args:
@@ -48,10 +46,6 @@ async def wait_with_progress_bar(minutes: int, description: str, total_duration_
             for i in range(wait_seconds):
                 await asyncio.sleep(1)
                 pbar.update(1)
-                # Update dashboard progress
-                if dashboard:
-                    current = elapsed_seconds + i + 1
-                    dashboard.update_in_thread(lambda c=current, t=total_seconds: dashboard.update_plunder_progress(c, t))
     else:
         # Standard progress bar (0% to 100% for the wait time)
         with tqdm(total=wait_seconds, desc=description, unit="s", 
@@ -61,9 +55,6 @@ async def wait_with_progress_bar(minutes: int, description: str, total_duration_
             for i in range(wait_seconds):
                 await asyncio.sleep(1)
                 pbar.update(1)
-                # Update dashboard progress
-                if dashboard:
-                    dashboard.update_in_thread(lambda c=i+1, t=wait_seconds: dashboard.update_plunder_progress(c, t))
     
     # Print bottom border (after progress bar completes)
     print("="*80)
@@ -79,11 +70,9 @@ class HolyWarBot:
         self.browser: Browser = None
         self.playwright: Playwright = None
         self.context = None
-        self.dashboard = None
-        self.stats = get_stats()
         
         # Configuration
-        self.min_gold_reserve = 20
+        self.min_gold_reserve = 10
         self.elixir_threshold = 100
         self.plunder_duration_minutes = 10
         self.attack_cooldown_minutes = 5
@@ -97,27 +86,6 @@ class HolyWarBot:
     async def start(self, headless=False):
         """Initialize browser and start bot"""
         try:
-            # Get dashboard reference (wait until it's ready)
-            max_retries = 20
-            for i in range(max_retries):
-                self.dashboard = get_dashboard()
-                if self.dashboard is not None:
-                    break
-                await asyncio.sleep(0.1)
-            
-            if self.dashboard is None:
-                logger.warning("Dashboard not available, continuing without UI")
-            else:
-                print(f"[BOT] Dashboard is available: {self.dashboard}")
-                logger.info("Updating dashboard status...")
-                self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Starting"))
-                self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Initializing browser..."))
-                
-                # Initialize statistics display
-                self._update_dashboard_stats()
-                
-                await asyncio.sleep(0.5)  # Give dashboard time to update
-            
             logger.info("Starting Playwright...")
             self.playwright = await async_playwright().start()
             
@@ -176,50 +144,6 @@ class HolyWarBot:
         """Close browser and cleanup"""
         await self._cleanup()
         logger.info("Bot stopped")
-    
-    def _update_dashboard_stats(self):
-        """Update dashboard with current statistics"""
-        if self.dashboard is None:
-            return
-        
-        gold_summary = self.stats.get_gold_summary()
-        stat_upgrades = self.stats.get_stat_upgrades()
-        elixir_summary = self.stats.get_elixir_summary()
-        combat_summary = self.stats.get_combat_summary()
-        activity_summary = self.stats.get_activity_summary()
-        
-        stats_data = {
-            'gold_earned': gold_summary['earned'],
-            'gold_spent': gold_summary['spent'],
-            'gold_net': gold_summary['net'],
-            'gold_on_stats': gold_summary['on_stats'],
-            'gold_on_elixirs': gold_summary['on_elixirs'],
-            'stat_upgrades': stat_upgrades,
-            'total_trainings': self.stats.stats['total_trainings'],
-            'consecrated_count': elixir_summary['consecrated']['count'],
-            'consecrated_cost': elixir_summary['consecrated']['total_cost'],
-            'baptised_count': elixir_summary['baptised']['count'],
-            'baptised_cost': elixir_summary['baptised']['total_cost'],
-            'blessed_count': elixir_summary['blessed']['count'],
-            'blessed_cost': elixir_summary['blessed']['total_cost'],
-            'elixirs': {
-                'consecrated_count': elixir_summary['consecrated']['count'],
-                'consecrated_cost': elixir_summary['consecrated']['total_cost'],
-                'baptised_count': elixir_summary['baptised']['count'],
-                'baptised_cost': elixir_summary['baptised']['total_cost'],
-                'blessed_count': elixir_summary['blessed']['count'],
-                'blessed_cost': elixir_summary['blessed']['total_cost'],
-            },
-            'victories': combat_summary['victories'],
-            'defeats': combat_summary['defeats'],
-            'win_rate': combat_summary['win_rate'],
-            'plunders': activity_summary['plunders'],
-            'plunder_hours': activity_summary['plunder_hours'],
-            'attacks': activity_summary['attacks'],
-            'training_sessions': activity_summary['training_sessions']
-        }
-        
-        self.dashboard.update_in_thread(lambda: self.dashboard.update_statistics(stats_data))
         
     async def is_logged_in(self) -> bool:
         """Check if currently logged in"""
@@ -273,10 +197,6 @@ class HolyWarBot:
         # Verify login by checking if we're on the welcome page
         if "/welcome" in self.page.url or "/char/attributes" in self.page.url:
             logger.info("Logged in successfully")
-            if self.dashboard:
-                print("[BOT] Updating dashboard with login status...")
-                self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Online"))
-                self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Logged in"))
         else:
             logger.warning(f"Login might have failed. Current URL: {self.page.url}")
     
@@ -324,9 +244,6 @@ class HolyWarBot:
                 if text and text.strip().isdigit():
                     gold = int(text.strip())
                     logger.info(f"Current gold: {gold}")
-                    if self.dashboard:
-                        print(f"[BOT] Calling dashboard.update_gold({gold})")
-                        self.dashboard.update_in_thread(lambda g=gold: self.dashboard.update_gold(g))
                     return gold
             
             # Fallback: Look for the gold indicator in the status bar
@@ -401,15 +318,6 @@ class HolyWarBot:
             
             logger.info(f"Plunder started! Will complete in {self.plunder_duration_minutes} minutes")
             logger.info(f"Plunder time remaining: {self.plunder_time_remaining} minutes")
-            
-            # Track plunder
-            self.stats.add_plunder(self.plunder_duration_minutes)
-            
-            if self.dashboard:
-                self.dashboard.update_in_thread(lambda: self.dashboard.update_action(f"Plundering ({self.plunder_duration_minutes} min)"))
-                self.dashboard.update_in_thread(lambda: self.dashboard.update_plunder_time(self.plunder_time_remaining))
-                self._update_dashboard_stats()
-            
             return True
             
         except Exception as e:
@@ -533,15 +441,7 @@ class HolyWarBot:
                 trained_something = True
                 training_count += 1
                 
-                # Track stat upgrade
-                stat_names = ["strength", "attack", "defence", "agility", "stamina"]
-                stat_name = stat_names[train_index] if train_index < len(stat_names) else "unknown"
-                self.stats.add_gold_spent_on_stat(stat_name, actual_cost)
-                
                 logger.info(f"Training #{training_count} - Cost: {actual_cost} gold. Remaining gold: {current_gold}")
-                
-                # Update dashboard with new stats
-                self._update_dashboard_stats()
                     
             except Exception as e:
                 logger.error(f"Error during training: {e}")
@@ -550,7 +450,6 @@ class HolyWarBot:
                 break
                 
         if trained_something:
-            self.stats.add_training_session()
             logger.info(f"Completed {training_count} trainings. Final gold: {current_gold}")
         else:
             logger.info("No training was possible")
@@ -595,107 +494,73 @@ class HolyWarBot:
             return False
     
     async def buy_elixirs(self):
-        """Buy elixirs if gold > 65, until gold < 50 (keeping plunder reserve)"""
+        """Buy elixirs if gold > threshold"""
         logger.info("Buying elixirs...")
         
-        # Navigate to town/city page first
-        await self.page.goto(f"{self.base_url}/town/index/?w={self.world}")
-        await asyncio.sleep(2)
-        
-        # Then navigate to elixirs shop
+        # Navigate to elixirs shop
         await self.page.goto(f"{self.base_url}/town/alchemist/?w={self.world}")
         await asyncio.sleep(2)
         
         current_gold = await self.get_current_gold()
         
-        # Check if we have more than 65 gold
-        if current_gold <= 65:
-            logger.info(f"Gold ({current_gold}) not above 65, skipping elixir purchase")
+        if current_gold < self.elixir_threshold:
+            logger.info(f"Gold ({current_gold}) below elixir threshold ({self.elixir_threshold})")
             return False
-        
-        # Check plunder time to determine minimum gold to keep
-        await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
-        await asyncio.sleep(2)
-        plunder_time = await self.get_plunder_time_remaining()
-        
-        # If we have plunder time, keep > 10 gold. Otherwise can go down to 10.
-        min_gold_to_keep = self.min_gold_reserve if plunder_time >= self.plunder_duration_minutes else 10
-        
-        logger.info(f"Plunder time remaining: {plunder_time} min. Keeping minimum {min_gold_to_keep} gold.")
-        
-        # Go back to elixir shop
-        await self.page.goto(f"{self.base_url}/town/alchemist/?w={self.world}")
-        await asyncio.sleep(2)
             
-        # Keep buying until gold < 50 (but respect minimum)
+        # Keep buying the most expensive elixir we can afford until we're close to min_gold_reserve
         bought_something = False
-        buy_attempts = 0
-        max_attempts = 20  # Prevent infinite loop
         
-        while current_gold >= 50 and buy_attempts < max_attempts:
-            buy_attempts += 1
-            
-            # Make sure we'd still have enough gold after buying
-            affordable_elixir_cost = None
-            
-            # Check what we can afford while keeping minimum
-            if current_gold >= 450 + min_gold_to_keep:
-                affordable_elixir_cost = 450
-                elixir_name = "Blessed Elixir"
-            elif current_gold >= 90 + min_gold_to_keep:
-                affordable_elixir_cost = 90
-                elixir_name = "Baptised Elixir"
-            elif current_gold >= 50 + min_gold_to_keep:
-                affordable_elixir_cost = 50
-                elixir_name = "Consecrated Elixir"
-            else:
-                logger.info(f"Cannot buy more elixirs - would go below {min_gold_to_keep} gold reserve")
-                break
-            
+        while current_gold > self.min_gold_reserve + 50:  # Keep some buffer
             try:
-                # Try to buy the most expensive elixir we can afford
-                if affordable_elixir_cost == 450:
-                    await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Blessed Elixir"))')
-                elif affordable_elixir_cost == 90:
-                    await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Baptised Elixir"))')
-                elif affordable_elixir_cost == 50:
-                    await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Consecrated Elixir"))')
+                # Find all buy buttons and their prices
+                # Look for elixirs and their prices in the page
+                content = await self.page.content()
                 
-                await asyncio.sleep(2)
+                # Try to find and click buy buttons for expensive elixirs
+                # Blessed Elixir (450 gold) -> Baptised Elixir (90) -> Consecrated Elixir (50)
                 
-                # Check gold after purchase
-                new_gold = await self.get_current_gold()
-                
-                if new_gold < current_gold:
-                    # Purchase successful
-                    bought_something = True
-                    actual_cost = current_gold - new_gold
-                    current_gold = new_gold
-                    
-                    # Track elixir purchase
-                    self.stats.add_gold_spent_on_elixir(elixir_name, actual_cost)
-                    
-                    logger.info(f"Bought {elixir_name} for {actual_cost} gold. Remaining: {current_gold}")
-                    
-                    # Update dashboard
-                    self._update_dashboard_stats()
-                    
-                    # If we're below 50 gold, stop
-                    if current_gold < 50:
-                        logger.info(f"Gold now below 50 ({current_gold}). Stopping elixir purchases.")
-                        break
-                else:
-                    logger.warning("Purchase failed or gold didn't decrease")
-                    break
-                    
-            except Exception as e:
-                logger.error(f"Error buying elixir: {e}")
+                if current_gold >= 450:
+                    # Try to buy Blessed Elixir
+                    try:
+                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Blessed Elixir"))')
+                        await asyncio.sleep(1)
+                        bought_something = True
+                        current_gold -= 450
+                        logger.info(f"Bought Blessed Elixir for 450 gold. Remaining: {current_gold}")
+                        continue
+                    except:
+                        pass
+                        
+                if current_gold >= 90:
+                    # Try to buy Baptised Elixir
+                    try:
+                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Baptised Elixir"))')
+                        await asyncio.sleep(1)
+                        bought_something = True
+                        current_gold -= 90
+                        logger.info(f"Bought Baptised Elixir for 90 gold. Remaining: {current_gold}")
+                        continue
+                    except:
+                        pass
+                        
+                if current_gold >= 50:
+                    # Try to buy Consecrated Elixir
+                    try:
+                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Consecrated Elixir"))')
+                        await asyncio.sleep(1)
+                        bought_something = True
+                        current_gold -= 50
+                        logger.info(f"Bought Consecrated Elixir for 50 gold. Remaining: {current_gold}")
+                        continue
+                    except:
+                        pass
+                        
+                # If we get here, we couldn't buy anything
                 break
-        
-        if bought_something:
-            logger.info(f"Finished buying elixirs. Final gold: {current_gold}")
-        else:
-            logger.info("No elixirs were purchased")
+                
+            except Exception as e:
+                logger.error(f"Error buying elixirs: {e}")
+                break
                 
         return bought_something
         
@@ -753,7 +618,7 @@ class HolyWarBot:
         trained, current_gold = await self.train_attributes()
         
         # After training, check if we should buy elixirs
-        # Only buy if: gold > 65 AND we can't train anymore (stats maxed)
+        # Only buy if: gold > 100 AND we can't train anymore (stats maxed)
         if current_gold > self.elixir_threshold:
             logger.info(f"Gold ({current_gold}) is above elixir threshold ({self.elixir_threshold})")
             
@@ -838,7 +703,7 @@ class HolyWarBot:
                     
                     # Wait for the plunder to complete with progress bar
                     # Show progress relative to plunder duration
-                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes}/{self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
+                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes}/{self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
                     
                     # After waiting, go back to attack page to collect gold
                     logger.info("Active plunder complete! Collecting gold...")
@@ -848,7 +713,7 @@ class HolyWarBot:
                     return True
                 else:
                     logger.warning("Found active plunder but couldn't parse countdown. Waiting 5 minutes...")
-                    await wait_with_progress_bar(5, "Waiting for active plunder (5/10 min)", self.plunder_duration_minutes, self.dashboard)
+                    await wait_with_progress_bar(5, "Waiting for active plunder (5/10 min)", self.plunder_duration_minutes)
                     await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                     await asyncio.sleep(2)
                     return True
@@ -909,26 +774,14 @@ class HolyWarBot:
                         plunder_success = await self.do_plunder()
                         
                         if plunder_success:
-                            # Track gold before plunder
-                            gold_before = current_gold
-                            
                             logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
+                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
                             logger.info("Plunder complete! Collecting gold...")
                             
                             # Go back to attack page to collect the gold
                             await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                             await asyncio.sleep(3)
-                            
-                            # Track gold earned
-                            gold_after = await self.get_current_gold()
-                            gold_earned = gold_after - gold_before
-                            if gold_earned > 0:
-                                self.stats.add_gold_earned(gold_earned)
-                                logger.info(f"Gold collected! Earned {gold_earned} gold from plunder")
-                                self._update_dashboard_stats()
-                            else:
-                                logger.info("Gold collected! Looping back to training check...")
+                            logger.info("Gold collected! Looping back to training check...")
                             
                             # Loop back to STEP 1 (training check)
                             continue
@@ -943,26 +796,14 @@ class HolyWarBot:
                             plunder_success = await self.do_plunder()
                             
                             if plunder_success:
-                                # Track gold before plunder
-                                gold_before_plunder = await self.get_current_gold()
-                                
                                 logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
+                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
                                 logger.info("Plunder complete! Collecting gold...")
                                 
                                 # Go back to attack page to collect the gold
                                 await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                                 await asyncio.sleep(3)
-                                
-                                # Track gold earned
-                                gold_after_plunder = await self.get_current_gold()
-                                gold_earned_plunder = gold_after_plunder - gold_before_plunder
-                                if gold_earned_plunder > 0:
-                                    self.stats.add_gold_earned(gold_earned_plunder)
-                                    logger.info(f"Gold collected! Earned {gold_earned_plunder} gold from plunder")
-                                    self._update_dashboard_stats()
-                                else:
-                                    logger.info("Gold collected! Looping back to training check...")
+                                logger.info("Gold collected! Looping back to training check...")
                                 
                                 # Loop back to STEP 1 (training check)
                                 continue
@@ -987,13 +828,10 @@ class HolyWarBot:
                     
                     # Attack a player, wait 5 minutes, then check plunder time again
                     logger.info("Attacking a player...")
-                    attack_result = await self.attack_player()
-                    if attack_result:
-                        self.stats.add_attack()
-                        self._update_dashboard_stats()
+                    await self.attack_player()
                     
                     logger.info(f"Waiting {self.attack_cooldown_minutes} minutes for attack cooldown...")
-                    await wait_with_progress_bar(self.attack_cooldown_minutes, f"Attack Cooldown ({self.attack_cooldown_minutes} min)", None, self.dashboard)
+                    await wait_with_progress_bar(self.attack_cooldown_minutes, f"Attack Cooldown ({self.attack_cooldown_minutes} min)")
                     
                     # Loop back to STEP 2 (check plunder time)
                     continue
@@ -1035,29 +873,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    import threading
-    from bot_dashboard import run_dashboard
-    
-    # Run bot in background thread
-    def run_bot():
-        try:
-            print("Bot thread running!")
-            logger.info("Bot thread starting...")
-            asyncio.run(main())
-        except Exception as e:
-            print(f"Bot thread error: {e}")
-            logger.error(f"Bot thread error: {e}")
-            import traceback
-            print(traceback.format_exc())
-            logger.error(traceback.format_exc())
-    
-    print("Starting bot thread...")
-    logger.info("Starting bot thread...")
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-    print("Bot thread started, launching dashboard...")
-    logger.info("Bot thread started, launching dashboard...")
-    
-    # Run Kivy dashboard in main thread
-    run_dashboard()
+    asyncio.run(main())
 
