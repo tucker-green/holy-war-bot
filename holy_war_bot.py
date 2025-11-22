@@ -1037,16 +1037,21 @@ if __name__ == "__main__":
     # Run bot in background thread
     def run_bot():
         try:
+            print("Bot thread running!")
             logger.info("Bot thread starting...")
             asyncio.run(main())
         except Exception as e:
+            print(f"Bot thread error: {e}")
             logger.error(f"Bot thread error: {e}")
             import traceback
+            print(traceback.format_exc())
             logger.error(traceback.format_exc())
     
+    print("Starting bot thread...")
     logger.info("Starting bot thread...")
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
+    print("Bot thread started, launching dashboard...")
     logger.info("Bot thread started, launching dashboard...")
     
     # Run Kivy dashboard in main thread
