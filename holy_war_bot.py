@@ -135,6 +135,36 @@ class HolyWarBot:
         await self._cleanup()
         logger.info("Bot stopped")
         
+    async def is_logged_in(self) -> bool:
+        """Check if currently logged in"""
+        try:
+            # Check for elements that only exist when logged in
+            # The gold counter (#spMoney) only exists when logged in
+            gold_span = self.page.locator('#spMoney')
+            if await gold_span.count() > 0:
+                return True
+            
+            # Also check if we're on the login page
+            current_url = self.page.url
+            if "/auth/loginform" in current_url or "/auth/login" in current_url:
+                return False
+            
+            # Check for login button
+            login_button = self.page.locator('button:has(img[alt="Login"])')
+            if await login_button.count() > 0:
+                return False
+            
+            # If we can see the username in the page, we're logged in
+            content = await self.page.content()
+            if self.username in content and "logout" in content.lower():
+                return True
+                
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking login status: {e}")
+            return False
+    
     async def login(self):
         """Login to the game"""
         logger.info(f"Logging in as {self.username}...")
@@ -159,6 +189,40 @@ class HolyWarBot:
             logger.info("Logged in successfully")
         else:
             logger.warning(f"Login might have failed. Current URL: {self.page.url}")
+    
+    async def ensure_logged_in(self):
+        """Check if logged in, and re-login if necessary"""
+        try:
+            if not await self.is_logged_in():
+                logger.warning("Not logged in! Attempting to re-login...")
+                await self.login()
+                
+                # Verify login worked
+                if await self.is_logged_in():
+                    logger.info("Re-login successful!")
+                    return True
+                else:
+                    logger.error("Re-login failed!")
+                    return False
+            return True
+        except Exception as e:
+            logger.error(f"Error in ensure_logged_in: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+    
+    async def safe_goto(self, url: str, timeout: int = 30000):
+        """Navigate to a URL with login check"""
+        try:
+            await self.page.goto(url, timeout=timeout)
+        except Exception as e:
+            logger.warning(f"Navigation error: {e}")
+            # Check if logged out
+            if not await self.is_logged_in():
+                logger.warning("Detected logout during navigation. Re-logging in...")
+                await self.ensure_logged_in()
+                # Try navigation again
+                await self.page.goto(url, timeout=timeout)
         
     async def get_current_gold(self) -> int:
         """Get current gold amount from the status bar"""
@@ -181,6 +245,12 @@ class HolyWarBot:
                     gold = int(text.strip())
                     logger.info(f"Current gold (fallback method): {gold}")
                     return gold
+            
+            # If we can't find gold, might be logged out
+            logger.warning("Could not detect gold - may be logged out")
+            if not await self.is_logged_in():
+                logger.warning("Confirmed: not logged in")
+                return -1  # Return -1 to signal logout
                 
         except Exception as e:
             logger.error(f"Error getting gold: {e}")
@@ -658,6 +728,12 @@ class HolyWarBot:
             
             # Main game loop - follows flowchart exactly
             while True:
+                # Check if still logged in before each cycle
+                if not await self.ensure_logged_in():
+                    logger.error("Cannot continue - login failed. Retrying in 60 seconds...")
+                    await asyncio.sleep(60)
+                    continue
+                
                 # STEP 1: Check if we can train (and have > 10 gold left)
                 logger.info("=== Checking if we can train ===")
                 can_train = await self.can_train_with_reserve()
