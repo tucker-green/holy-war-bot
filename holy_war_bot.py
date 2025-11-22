@@ -97,15 +97,24 @@ class HolyWarBot:
     async def start(self, headless=False):
         """Initialize browser and start bot"""
         try:
-            # Get dashboard reference (already started in main thread)
-            self.dashboard = get_dashboard()
-            self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Starting"))
-            self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Initializing browser..."))
+            # Get dashboard reference (wait until it's ready)
+            max_retries = 20
+            for i in range(max_retries):
+                self.dashboard = get_dashboard()
+                if self.dashboard is not None:
+                    break
+                await asyncio.sleep(0.1)
             
-            # Initialize statistics display
-            self._update_dashboard_stats()
-            
-            await asyncio.sleep(0.5)  # Give dashboard time to update
+            if self.dashboard is None:
+                logger.warning("Dashboard not available, continuing without UI")
+            else:
+                self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Starting"))
+                self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Initializing browser..."))
+                
+                # Initialize statistics display
+                self._update_dashboard_stats()
+                
+                await asyncio.sleep(0.5)  # Give dashboard time to update
             
             logger.info("Starting Playwright...")
             self.playwright = await async_playwright().start()
@@ -168,7 +177,7 @@ class HolyWarBot:
     
     def _update_dashboard_stats(self):
         """Update dashboard with current statistics"""
-        if not self.dashboard:
+        if self.dashboard is None:
             return
         
         gold_summary = self.stats.get_gold_summary()
