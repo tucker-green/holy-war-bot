@@ -564,6 +564,60 @@ class HolyWarBot:
                 
         return bought_something
         
+    async def get_my_stats(self):
+        """Get my current stats from attributes page"""
+        try:
+            # Navigate to attributes page
+            await self.page.goto(f"{self.base_url}/char/attributes/?w={self.world}")
+            await asyncio.sleep(2)
+            
+            content = await self.page.content()
+            import re
+            
+            stats = {}
+            stat_names = ['Strength', 'Attack', 'Defence', 'Agility', 'Stamina']
+            
+            for stat in stat_names:
+                # Find stat value in the page
+                match = re.search(rf'<td[^>]*>{stat}</td[^>]*>\s*<td[^>]*>(\d+)</td>', content, re.IGNORECASE)
+                if match:
+                    stats[stat.lower()] = int(match.group(1))
+                else:
+                    stats[stat.lower()] = 0
+            
+            total = sum(stats.values())
+            logger.info(f"My stats: STR={stats['strength']}, ATT={stats['attack']}, DEF={stats['defence']}, AGI={stats['agility']}, STA={stats['stamina']}, Total={total}")
+            return stats, total
+            
+        except Exception as e:
+            logger.error(f"Error getting my stats: {e}")
+            return {}, 0
+    
+    async def get_opponent_stats(self):
+        """Get opponent stats from current page"""
+        try:
+            content = await self.page.content()
+            import re
+            
+            stats = {}
+            stat_names = ['Strength', 'Attack', 'Defence', 'Agility', 'Stamina']
+            
+            for stat in stat_names:
+                # Find stat value in the opponent page
+                match = re.search(rf'<td[^>]*padding-left:30px;">{stat}</td>\s*<td[^>]*>(\d+)</td>', content, re.IGNORECASE)
+                if match:
+                    stats[stat.lower()] = int(match.group(1))
+                else:
+                    stats[stat.lower()] = 0
+            
+            total = sum(stats.values())
+            logger.info(f"Opponent stats: STR={stats['strength']}, ATT={stats['attack']}, DEF={stats['defence']}, AGI={stats['agility']}, STA={stats['stamina']}, Total={total}")
+            return stats, total
+            
+        except Exception as e:
+            logger.error(f"Error getting opponent stats: {e}")
+            return {}, 0
+    
     async def attack_player(self):
         """Attack a player of the target level"""
         logger.info(f"Attacking player of level {self.target_player_level}...")
@@ -576,9 +630,18 @@ class HolyWarBot:
             current_gold = await self.get_current_gold()
             logger.info(f"After buying elixirs, gold is now {current_gold}")
         
+        # Get my stats first
+        my_stats, my_total = await self.get_my_stats()
+        if my_total == 0:
+            logger.error("Could not get my stats, aborting attack")
+            return False
+        
         # Navigate to attack page
         await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
         await asyncio.sleep(2)
+        
+        max_attempts = 10  # Try up to 10 opponents
+        attempt = 0
         
         try:
             # Fill in search criteria
@@ -593,19 +656,42 @@ class HolyWarBot:
             await self.page.click('button[name="Search"]')
             await asyncio.sleep(2)
             
-            # Click attack button on first player in results
-            attack_buttons = await self.page.locator('input[type="image"][alt*="Attack"], a:has-text("Attack")').all()
-            
-            if attack_buttons:
-                await attack_buttons[0].click()
-                await asyncio.sleep(2)
+            while attempt < max_attempts:
+                attempt += 1
+                logger.info(f"Checking opponent #{attempt}...")
                 
-                self.last_attack_time = datetime.now()
-                logger.info("Attack initiated!")
-                return True
-            else:
-                logger.warning("No players found to attack")
-                return False
+                # Get opponent stats
+                opp_stats, opp_total = await self.get_opponent_stats()
+                
+                if opp_total == 0:
+                    logger.warning("Could not get opponent stats")
+                    return False
+                
+                # Compare stats
+                if opp_total < my_total:
+                    logger.info(f"Opponent is weaker ({opp_total} < {my_total}). Attacking!")
+                    
+                    # Click attack button
+                    await self.page.click('button[name="Attack"]')
+                    await asyncio.sleep(2)
+                    
+                    self.last_attack_time = datetime.now()
+                    logger.info("Attack initiated!")
+                    return True
+                else:
+                    logger.info(f"Opponent is stronger or equal ({opp_total} >= {my_total}). Looking for new opponent...")
+                    
+                    # Click "New Opponent" button
+                    new_opp_button = self.page.locator('img[src*="btn_neuer_gegner"]')
+                    if await new_opp_button.count() > 0:
+                        await new_opp_button.first.click()
+                        await asyncio.sleep(2)
+                    else:
+                        logger.warning("Could not find 'New Opponent' button")
+                        return False
+            
+            logger.warning(f"Could not find suitable opponent after {max_attempts} attempts")
+            return False
                 
         except Exception as e:
             logger.error(f"Error attacking player: {e}")
