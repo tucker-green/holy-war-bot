@@ -409,6 +409,9 @@ def get_dashboard():
 
 def run_dashboard():
     """Run the dashboard app (must be called from main thread)"""
-    global _app_instance
-    if _app_instance:
-        _app_instance.run()
+    global _app_instance, _dashboard_instance
+    if _app_instance is None:
+        _app_instance = DashboardApp()
+        _app_instance.build()
+        _dashboard_instance = _app_instance.dashboard
+    _app_instance.run()
