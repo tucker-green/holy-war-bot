@@ -494,73 +494,100 @@ class HolyWarBot:
             return False
     
     async def buy_elixirs(self):
-        """Buy elixirs if gold > threshold"""
+        """Buy elixirs if gold > 65, until gold < 50 (keeping plunder reserve)"""
         logger.info("Buying elixirs...")
         
-        # Navigate to elixirs shop
+        # Navigate to town/city page first
+        await self.page.goto(f"{self.base_url}/town/index/?w={self.world}")
+        await asyncio.sleep(2)
+        
+        # Then navigate to elixirs shop
         await self.page.goto(f"{self.base_url}/town/alchemist/?w={self.world}")
         await asyncio.sleep(2)
         
         current_gold = await self.get_current_gold()
         
-        if current_gold < self.elixir_threshold:
-            logger.info(f"Gold ({current_gold}) below elixir threshold ({self.elixir_threshold})")
+        # Check if we have more than 65 gold
+        if current_gold <= 65:
+            logger.info(f"Gold ({current_gold}) not above 65, skipping elixir purchase")
             return False
-            
-        # Keep buying the most expensive elixir we can afford until we're close to min_gold_reserve
-        bought_something = False
         
-        while current_gold > self.min_gold_reserve + 50:  # Keep some buffer
+        # Check plunder time to determine minimum gold to keep
+        await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
+        await asyncio.sleep(2)
+        plunder_time = await self.get_plunder_time_remaining()
+        
+        # If we have plunder time, keep > 10 gold. Otherwise can go down to 10.
+        min_gold_to_keep = self.min_gold_reserve if plunder_time >= self.plunder_duration_minutes else 10
+        
+        logger.info(f"Plunder time remaining: {plunder_time} min. Keeping minimum {min_gold_to_keep} gold.")
+        
+        # Go back to elixir shop
+        await self.page.goto(f"{self.base_url}/town/alchemist/?w={self.world}")
+        await asyncio.sleep(2)
+            
+        # Keep buying until gold < 50 (but respect minimum)
+        bought_something = False
+        buy_attempts = 0
+        max_attempts = 20  # Prevent infinite loop
+        
+        while current_gold >= 50 and buy_attempts < max_attempts:
+            buy_attempts += 1
+            
+            # Make sure we'd still have enough gold after buying
+            affordable_elixir_cost = None
+            
+            # Check what we can afford while keeping minimum
+            if current_gold >= 450 + min_gold_to_keep:
+                affordable_elixir_cost = 450
+                elixir_name = "Blessed Elixir"
+            elif current_gold >= 90 + min_gold_to_keep:
+                affordable_elixir_cost = 90
+                elixir_name = "Baptised Elixir"
+            elif current_gold >= 50 + min_gold_to_keep:
+                affordable_elixir_cost = 50
+                elixir_name = "Consecrated Elixir"
+            else:
+                logger.info(f"Cannot buy more elixirs - would go below {min_gold_to_keep} gold reserve")
+                break
+            
             try:
-                # Find all buy buttons and their prices
-                # Look for elixirs and their prices in the page
-                content = await self.page.content()
+                # Try to buy the most expensive elixir we can afford
+                if affordable_elixir_cost == 450:
+                    await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Blessed Elixir"))')
+                elif affordable_elixir_cost == 90:
+                    await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Baptised Elixir"))')
+                elif affordable_elixir_cost == 50:
+                    await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Consecrated Elixir"))')
                 
-                # Try to find and click buy buttons for expensive elixirs
-                # Blessed Elixir (450 gold) -> Baptised Elixir (90) -> Consecrated Elixir (50)
+                await asyncio.sleep(2)
                 
-                if current_gold >= 450:
-                    # Try to buy Blessed Elixir
-                    try:
-                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Blessed Elixir"))')
-                        await asyncio.sleep(1)
-                        bought_something = True
-                        current_gold -= 450
-                        logger.info(f"Bought Blessed Elixir for 450 gold. Remaining: {current_gold}")
-                        continue
-                    except:
-                        pass
-                        
-                if current_gold >= 90:
-                    # Try to buy Baptised Elixir
-                    try:
-                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Baptised Elixir"))')
-                        await asyncio.sleep(1)
-                        bought_something = True
-                        current_gold -= 90
-                        logger.info(f"Bought Baptised Elixir for 90 gold. Remaining: {current_gold}")
-                        continue
-                    except:
-                        pass
-                        
-                if current_gold >= 50:
-                    # Try to buy Consecrated Elixir
-                    try:
-                        await self.page.click('input[type="image"][alt*="Buy"]:near(:text("Consecrated Elixir"))')
-                        await asyncio.sleep(1)
-                        bought_something = True
-                        current_gold -= 50
-                        logger.info(f"Bought Consecrated Elixir for 50 gold. Remaining: {current_gold}")
-                        continue
-                    except:
-                        pass
-                        
-                # If we get here, we couldn't buy anything
-                break
+                # Check gold after purchase
+                new_gold = await self.get_current_gold()
                 
+                if new_gold < current_gold:
+                    # Purchase successful
+                    bought_something = True
+                    actual_cost = current_gold - new_gold
+                    current_gold = new_gold
+                    logger.info(f"Bought {elixir_name} for {actual_cost} gold. Remaining: {current_gold}")
+                    
+                    # If we're below 50 gold, stop
+                    if current_gold < 50:
+                        logger.info(f"Gold now below 50 ({current_gold}). Stopping elixir purchases.")
+                        break
+                else:
+                    logger.warning("Purchase failed or gold didn't decrease")
+                    break
+                    
             except Exception as e:
-                logger.error(f"Error buying elixirs: {e}")
+                logger.error(f"Error buying elixir: {e}")
                 break
+        
+        if bought_something:
+            logger.info(f"Finished buying elixirs. Final gold: {current_gold}")
+        else:
+            logger.info("No elixirs were purchased")
                 
         return bought_something
         
@@ -618,7 +645,7 @@ class HolyWarBot:
         trained, current_gold = await self.train_attributes()
         
         # After training, check if we should buy elixirs
-        # Only buy if: gold > 100 AND we can't train anymore (stats maxed)
+        # Only buy if: gold > 65 AND we can't train anymore (stats maxed)
         if current_gold > self.elixir_threshold:
             logger.info(f"Gold ({current_gold}) is above elixir threshold ({self.elixir_threshold})")
             
