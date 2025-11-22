@@ -5,6 +5,7 @@ Automates gameplay including plundering, training, buying elixirs, and attacking
 
 import asyncio
 import time
+import json
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 import logging
@@ -72,7 +73,7 @@ class HolyWarBot:
         self.context = None
         
         # Configuration
-        self.min_gold_reserve = 10
+        self.min_gold_reserve = 20
         self.elixir_threshold = 100
         self.plunder_duration_minutes = 10
         self.attack_cooldown_minutes = 5
@@ -82,6 +83,37 @@ class HolyWarBot:
         self.plunder_time_remaining = 120  # Start with 2 hours (120 minutes)
         self.last_plunder_time = None
         self.last_attack_time = None
+        self.state_file = 'bot_state.json'
+        
+        # Dashboard state
+        self.dashboard_state = {
+            'status': 'Starting',
+            'gold': 0,
+            'level': 1,
+            'plunder_status': 'Idle',
+            'plunder_progress': 0,
+            'plunder_time_remaining': 0,
+            'last_action': 'Bot initializing...',
+            'last_update': datetime.now().isoformat(),
+            'stats': {
+                'strength': 0,
+                'attack': 0,
+                'defence': 0,
+                'agility': 0,
+                'stamina': 0
+            }
+        }
+    
+    def update_dashboard_state(self, **kwargs):
+        """Update the dashboard state and write to file"""
+        self.dashboard_state.update(kwargs)
+        self.dashboard_state['last_update'] = datetime.now().isoformat()
+        
+        try:
+            with open(self.state_file, 'w') as f:
+                json.dump(self.dashboard_state, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error writing dashboard state: {e}")
         
     async def start(self, headless=False):
         """Initialize browser and start bot"""
@@ -197,6 +229,7 @@ class HolyWarBot:
         # Verify login by checking if we're on the welcome page
         if "/welcome" in self.page.url or "/char/attributes" in self.page.url:
             logger.info("Logged in successfully")
+            self.update_dashboard_state(status='Online', last_action='Logged in successfully')
         else:
             logger.warning(f"Login might have failed. Current URL: {self.page.url}")
     
@@ -244,6 +277,7 @@ class HolyWarBot:
                 if text and text.strip().isdigit():
                     gold = int(text.strip())
                     logger.info(f"Current gold: {gold}")
+                    self.update_dashboard_state(gold=gold)
                     return gold
             
             # Fallback: Look for the gold indicator in the status bar
@@ -318,6 +352,11 @@ class HolyWarBot:
             
             logger.info(f"Plunder started! Will complete in {self.plunder_duration_minutes} minutes")
             logger.info(f"Plunder time remaining: {self.plunder_time_remaining} minutes")
+            self.update_dashboard_state(
+                plunder_status=f'Plundering ({self.plunder_duration_minutes} min)',
+                plunder_time_remaining=self.plunder_time_remaining,
+                last_action=f'Started {self.plunder_duration_minutes} min plunder'
+            )
             return True
             
         except Exception as e:

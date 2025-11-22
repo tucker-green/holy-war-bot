@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holy War Bot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .status-badge.online {
+            background: #4caf50;
+        }
+        
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .card {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.18);
+        }
+        
+        .card h2 {
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+            padding-bottom: 10px;
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label {
+            font-weight: 600;
+            opacity: 0.9;
+        }
+        
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+        
+        .gold {
+            color: #ffd700;
+        }
+        
+        .progress-container {
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        
+        .activity-log {
+            grid-column: 1 / -1;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .log-entry {
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            margin-bottom: 5px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        
+        .timestamp {
+            opacity: 0.7;
+            font-size: 0.85em;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .pulsing {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚔️ Holy War Bot Dashboard</h1>
+            <span class="status-badge" id="status-badge">Connecting...</span>
+        </header>
+        
+        <div class="dashboard">
+            <div class="card">
+                <h2>💰 Resources</h2>
+                <div class="stat-row">
+                    <span class="stat-label">Gold:</span>
+                    <span class="stat-value gold" id="gold">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Level:</span>
+                    <span class="stat-value" id="level">1</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Plunder Time:</span>
+                    <span class="stat-value" id="plunder-time">0 min</span>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>⚔️ Character Stats</h2>
+                <div class="stat-row">
+                    <span class="stat-label">Strength:</span>
+                    <span class="stat-value" id="strength">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Attack:</span>
+                    <span class="stat-value" id="attack">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Defence:</span>
+                    <span class="stat-value" id="defence">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Agility:</span>
+                    <span class="stat-value" id="agility">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Stamina:</span>
+                    <span class="stat-value" id="stamina">0</span>
+                </div>
+            </div>
+            
+            <div class="card" style="grid-column: 1 / -1;">
+                <h2>📊 Plunder Progress</h2>
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%">
+                            <span id="progress-text">0%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Status:</span>
+                    <span class="stat-value" id="plunder-status">Idle</span>
+                </div>
+            </div>
+            
+            <div class="card activity-log">
+                <h2>📜 Activity Log</h2>
+                <div id="activity-log">
+                    <div class="log-entry">
+                        <span class="timestamp">Waiting for bot to start...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        
+        socket.on('connect', function() {
+            console.log('Connected to dashboard');
+            updateStatusBadge('online');
+        });
+        
+        socket.on('disconnect', function() {
+            console.log('Disconnected from dashboard');
+            updateStatusBadge('offline');
+        });
+        
+        socket.on('state_update', function(data) {
+            updateDashboard(data);
+        });
+        
+        function updateStatusBadge(status) {
+            const badge = document.getElementById('status-badge');
+            if (status === 'online') {
+                badge.textContent = '🟢 Connected';
+                badge.classList.add('online');
+            } else {
+                badge.textContent = '🔴 Disconnected';
+                badge.classList.remove('online');
+            }
+        }
+        
+        function updateDashboard(state) {
+            // Update resources
+            document.getElementById('gold').textContent = state.gold || 0;
+            document.getElementById('level').textContent = state.level || 1;
+            document.getElementById('plunder-time').textContent = (state.plunder_time_remaining || 0) + ' min';
+            
+            // Update stats
+            if (state.stats) {
+                document.getElementById('strength').textContent = state.stats.strength || 0;
+                document.getElementById('attack').textContent = state.stats.attack || 0;
+                document.getElementById('defence').textContent = state.stats.defence || 0;
+                document.getElementById('agility').textContent = state.stats.agility || 0;
+                document.getElementById('stamina').textContent = state.stats.stamina || 0;
+            }
+            
+            // Update plunder progress
+            const progress = state.plunder_progress || 0;
+            document.getElementById('progress-fill').style.width = progress + '%';
+            document.getElementById('progress-text').textContent = Math.round(progress) + '%';
+            document.getElementById('plunder-status').textContent = state.plunder_status || 'Idle';
+            
+            // Add to activity log
+            if (state.last_action) {
+                addLogEntry(state.last_action);
+            }
+        }
+        
+        function addLogEntry(message) {
+            const log = document.getElementById('activity-log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="timestamp">${timestamp}</span> - ${message}`;
+            
+            log.insertBefore(entry, log.firstChild);
+            
+            // Keep only last 10 entries
+            while (log.children.length > 10) {
+                log.removeChild(log.lastChild);
+            }
+        }
+        
+        // Poll for updates every 2 seconds
+        setInterval(function() {
+            fetch('/api/state')
+                .then(response => response.json())
+                .then(data => updateDashboard(data))
+                .catch(err => console.error('Error fetching state:', err));
+        }, 2000);
+        
+        // Initial load
+        fetch('/api/state')
+            .then(response => response.json())
+            .then(data => updateDashboard(data));
+    </script>
+</body>
+</html>
+
