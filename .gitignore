@@ -46,8 +46,8 @@ browser-logs/
 *.png
 *.jpg
 
-# Config (if sensitive - uncomment if you want to keep credentials private)
-# config.py
+# Config (keep credentials private)
+config.py
 
 # Test files
 test_*.py
