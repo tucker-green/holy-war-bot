@@ -47,18 +47,19 @@ The Holy War Bot now includes a native desktop UI dashboard that displays real-t
 3. The Firefox browser window opens alongside it
 4. All stats update in real-time as the bot runs
 
-## Position Setup
+## Window Setup
 
-- **Dashboard**: Top-left corner (0, 0)
-- **Browser**: You can manually position it to the right of the dashboard
+- **Dashboard**: 450x800px window with dark theme
+- **Browser**: Opens alongside the dashboard
 - Both windows stay open while the bot runs
+- Dashboard includes scrollable statistics section
 
 ## Technical Details
 
-- Built with **tkinter** (built into Python, no extra install needed)
-- Runs in a **separate thread** (non-blocking)
-- Updates via **thread-safe callbacks**
-- **Always-on-top** attribute keeps it visible
+- Built with **Kivy** (cross-platform GUI framework, better rendering on macOS)
+- Runs in the **main thread** with bot in background thread
+- Updates via **thread-safe Clock.schedule_once()** method
+- Scrollable statistics section for comprehensive data tracking
 
 Enjoy watching your bot work! 🎮
 
