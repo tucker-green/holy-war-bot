@@ -1033,6 +1033,9 @@ if __name__ == "__main__":
     dashboard.update_status("Starting")
     dashboard.update_action("Initializing...")
     
+    # Force initial render
+    dashboard.root.update()
+    
     # Run bot in background thread
     def run_bot():
         asyncio.run(main())

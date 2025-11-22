@@ -38,6 +38,9 @@ class BotDashboard:
         
         self.create_widgets()
         
+        # Force initial render
+        self.root.update_idletasks()
+        
     def create_widgets(self):
         """Create all GUI widgets"""
         # Title
