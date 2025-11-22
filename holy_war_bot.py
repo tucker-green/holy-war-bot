@@ -76,7 +76,7 @@ class HolyWarBot:
         self.elixir_threshold = 100
         self.plunder_duration_minutes = 10
         self.attack_cooldown_minutes = 5
-        self.target_player_level = 1  # Configurable
+        self.target_player_level = 3  # Configurable
         
         # State tracking
         self.plunder_time_remaining = 120  # Start with 2 hours (120 minutes)
@@ -618,15 +618,24 @@ class HolyWarBot:
             import re
             
             stats = {}
-            stat_names = ['Strength', 'Attack', 'Defence', 'Agility', 'Stamina']
             
-            for stat in stat_names:
-                # Find stat value in the page
-                match = re.search(rf'<td[^>]*>{stat}</td[^>]*>\s*<td[^>]*>(\d+)</td>', content, re.IGNORECASE)
+            # The stats page has a summary table with abbreviated names (STR, ATT, DEF, AGI, STA)
+            # Pattern: <div style="position:relative;">STR<div ...><span>19</span></div></div>
+            stat_abbrevs = {
+                'STR': 'strength',
+                'ATT': 'attack',
+                'DEF': 'defence',
+                'AGI': 'agility',
+                'STA': 'stamina'
+            }
+            
+            for abbrev, full_name in stat_abbrevs.items():
+                # Look for the abbreviated stat name followed by span with value
+                match = re.search(rf'{abbrev}<div[^>]*><span>(\d+)</span>', content)
                 if match:
-                    stats[stat.lower()] = int(match.group(1))
+                    stats[full_name] = int(match.group(1))
                 else:
-                    stats[stat.lower()] = 0
+                    stats[full_name] = 0
             
             total = sum(stats.values())
             logger.info(f"My stats: STR={stats['strength']}, ATT={stats['attack']}, DEF={stats['defence']}, AGI={stats['agility']}, STA={stats['stamina']}, Total={total}")
@@ -634,6 +643,8 @@ class HolyWarBot:
             
         except Exception as e:
             logger.error(f"Error getting my stats: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {}, 0
     
     async def get_opponent_stats(self):
@@ -716,11 +727,30 @@ class HolyWarBot:
                     
                     # Click attack button
                     await self.page.click('button[name="Attack"]')
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(3)
                     
-                    self.last_attack_time = datetime.now()
-                    logger.info("Attack initiated!")
-                    return True
+                    # Verify attack was successful by checking for cooldown timer
+                    content = await self.page.content()
+                    import re
+                    
+                    # Look for cooldown timer like "You can attack again in 0:04:55"
+                    has_cooldown = re.search(r'attack again in.*?(\d+):(\d+):(\d+)', content, re.IGNORECASE)
+                    
+                    if has_cooldown:
+                        hours = int(has_cooldown.group(1))
+                        minutes = int(has_cooldown.group(2))
+                        seconds = int(has_cooldown.group(3))
+                        total_min = hours * 60 + minutes
+                        logger.info(f"✓ Attack successful! Cooldown: {hours}h {minutes}m {seconds}s ({total_min} minutes)")
+                        self.last_attack_time = datetime.now()
+                        return True
+                    else:
+                        logger.warning("Attack button clicked but no cooldown timer found. Attack may have failed.")
+                        # Save page for debugging
+                        with open('attack_result.html', 'w', encoding='utf-8') as f:
+                            f.write(content)
+                        logger.info("Saved attack_result.html for debugging")
+                        return False
                 else:
                     logger.info(f"Opponent is stronger or equal ({opp_total} >= {my_total}). Looking for new opponent...")
                     
