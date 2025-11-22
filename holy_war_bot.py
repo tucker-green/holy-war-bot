@@ -5,12 +5,12 @@ Automates gameplay including plundering, training, buying elixirs, and attacking
 
 import asyncio
 import time
-import json
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 import logging
 import config
 from tqdm import tqdm
+from bot_dashboard import get_dashboard
 
 # Setup logging
 logging.basicConfig(
@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def wait_with_progress_bar(minutes: int, description: str, total_duration_minutes: int = None):
+async def wait_with_progress_bar(minutes: int, description: str, total_duration_minutes: int = None, dashboard=None):
     """Wait with a visual progress bar showing remaining time
     
     Args:
@@ -47,6 +47,10 @@ async def wait_with_progress_bar(minutes: int, description: str, total_duration_
             for i in range(wait_seconds):
                 await asyncio.sleep(1)
                 pbar.update(1)
+                # Update dashboard progress
+                if dashboard:
+                    current = elapsed_seconds + i + 1
+                    dashboard.update_in_thread(lambda c=current, t=total_seconds: dashboard.update_plunder_progress(c, t))
     else:
         # Standard progress bar (0% to 100% for the wait time)
         with tqdm(total=wait_seconds, desc=description, unit="s", 
@@ -56,6 +60,9 @@ async def wait_with_progress_bar(minutes: int, description: str, total_duration_
             for i in range(wait_seconds):
                 await asyncio.sleep(1)
                 pbar.update(1)
+                # Update dashboard progress
+                if dashboard:
+                    dashboard.update_in_thread(lambda c=i+1, t=wait_seconds: dashboard.update_plunder_progress(c, t))
     
     # Print bottom border (after progress bar completes)
     print("="*80)
@@ -71,6 +78,7 @@ class HolyWarBot:
         self.browser: Browser = None
         self.playwright: Playwright = None
         self.context = None
+        self.dashboard = None
         
         # Configuration
         self.min_gold_reserve = 20
@@ -83,41 +91,17 @@ class HolyWarBot:
         self.plunder_time_remaining = 120  # Start with 2 hours (120 minutes)
         self.last_plunder_time = None
         self.last_attack_time = None
-        self.state_file = 'bot_state.json'
-        
-        # Dashboard state
-        self.dashboard_state = {
-            'status': 'Starting',
-            'gold': 0,
-            'level': 1,
-            'plunder_status': 'Idle',
-            'plunder_progress': 0,
-            'plunder_time_remaining': 0,
-            'last_action': 'Bot initializing...',
-            'last_update': datetime.now().isoformat(),
-            'stats': {
-                'strength': 0,
-                'attack': 0,
-                'defence': 0,
-                'agility': 0,
-                'stamina': 0
-            }
-        }
-    
-    def update_dashboard_state(self, **kwargs):
-        """Update the dashboard state and write to file"""
-        self.dashboard_state.update(kwargs)
-        self.dashboard_state['last_update'] = datetime.now().isoformat()
-        
-        try:
-            with open(self.state_file, 'w') as f:
-                json.dump(self.dashboard_state, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error writing dashboard state: {e}")
         
     async def start(self, headless=False):
         """Initialize browser and start bot"""
         try:
+            # Start dashboard
+            self.dashboard = get_dashboard()
+            self.dashboard.start()
+            self.dashboard.update_status("Starting")
+            self.dashboard.update_action("Initializing browser...")
+            await asyncio.sleep(0.5)  # Give dashboard time to appear
+            
             logger.info("Starting Playwright...")
             self.playwright = await async_playwright().start()
             
@@ -229,7 +213,9 @@ class HolyWarBot:
         # Verify login by checking if we're on the welcome page
         if "/welcome" in self.page.url or "/char/attributes" in self.page.url:
             logger.info("Logged in successfully")
-            self.update_dashboard_state(status='Online', last_action='Logged in successfully')
+            if self.dashboard:
+                self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Online"))
+                self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Logged in"))
         else:
             logger.warning(f"Login might have failed. Current URL: {self.page.url}")
     
@@ -277,7 +263,8 @@ class HolyWarBot:
                 if text and text.strip().isdigit():
                     gold = int(text.strip())
                     logger.info(f"Current gold: {gold}")
-                    self.update_dashboard_state(gold=gold)
+                    if self.dashboard:
+                        self.dashboard.update_in_thread(lambda g=gold: self.dashboard.update_gold(g))
                     return gold
             
             # Fallback: Look for the gold indicator in the status bar
@@ -352,11 +339,11 @@ class HolyWarBot:
             
             logger.info(f"Plunder started! Will complete in {self.plunder_duration_minutes} minutes")
             logger.info(f"Plunder time remaining: {self.plunder_time_remaining} minutes")
-            self.update_dashboard_state(
-                plunder_status=f'Plundering ({self.plunder_duration_minutes} min)',
-                plunder_time_remaining=self.plunder_time_remaining,
-                last_action=f'Started {self.plunder_duration_minutes} min plunder'
-            )
+            
+            if self.dashboard:
+                self.dashboard.update_in_thread(lambda: self.dashboard.update_action(f"Plundering ({self.plunder_duration_minutes} min)"))
+                self.dashboard.update_in_thread(lambda: self.dashboard.update_plunder_time(self.plunder_time_remaining))
+            
             return True
             
         except Exception as e:
@@ -769,7 +756,7 @@ class HolyWarBot:
                     
                     # Wait for the plunder to complete with progress bar
                     # Show progress relative to plunder duration
-                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes}/{self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
+                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes}/{self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
                     
                     # After waiting, go back to attack page to collect gold
                     logger.info("Active plunder complete! Collecting gold...")
@@ -779,7 +766,7 @@ class HolyWarBot:
                     return True
                 else:
                     logger.warning("Found active plunder but couldn't parse countdown. Waiting 5 minutes...")
-                    await wait_with_progress_bar(5, "Waiting for active plunder (5/10 min)", self.plunder_duration_minutes)
+                    await wait_with_progress_bar(5, "Waiting for active plunder (5/10 min)", self.plunder_duration_minutes, self.dashboard)
                     await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                     await asyncio.sleep(2)
                     return True
@@ -841,7 +828,7 @@ class HolyWarBot:
                         
                         if plunder_success:
                             logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
+                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
                             logger.info("Plunder complete! Collecting gold...")
                             
                             # Go back to attack page to collect the gold
@@ -863,7 +850,7 @@ class HolyWarBot:
                             
                             if plunder_success:
                                 logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
+                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
                                 logger.info("Plunder complete! Collecting gold...")
                                 
                                 # Go back to attack page to collect the gold
@@ -897,7 +884,7 @@ class HolyWarBot:
                     await self.attack_player()
                     
                     logger.info(f"Waiting {self.attack_cooldown_minutes} minutes for attack cooldown...")
-                    await wait_with_progress_bar(self.attack_cooldown_minutes, f"Attack Cooldown ({self.attack_cooldown_minutes} min)")
+                    await wait_with_progress_bar(self.attack_cooldown_minutes, f"Attack Cooldown ({self.attack_cooldown_minutes} min)", None, self.dashboard)
                     
                     # Loop back to STEP 2 (check plunder time)
                     continue

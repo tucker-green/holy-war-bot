@@ -1,0 +1,17 @@
+{
+  "status": "Online",
+  "gold": 26,
+  "level": 1,
+  "plunder_status": "Plundering (10 min)",
+  "plunder_progress": 0,
+  "plunder_time_remaining": 20,
+  "last_action": "Started 10 min plunder",
+  "last_update": "2025-11-21T21:19:22.462352",
+  "stats": {
+    "strength": 0,
+    "attack": 0,
+    "defence": 0,
+    "agility": 0,
+    "stamina": 0
+  }
+}
