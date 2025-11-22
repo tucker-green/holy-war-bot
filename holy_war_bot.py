@@ -568,6 +568,14 @@ class HolyWarBot:
         """Attack a player of the target level"""
         logger.info(f"Attacking player of level {self.target_player_level}...")
         
+        # Check gold before attacking - buy elixirs if we have 60+ gold
+        current_gold = await self.get_current_gold()
+        if current_gold >= 60:
+            logger.info(f"Gold is {current_gold} (>= 60). Buying elixirs before attacking to avoid losing gold...")
+            await self.buy_elixirs()
+            current_gold = await self.get_current_gold()
+            logger.info(f"After buying elixirs, gold is now {current_gold}")
+        
         # Navigate to attack page
         await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
         await asyncio.sleep(2)
