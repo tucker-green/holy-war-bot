@@ -49,6 +49,9 @@ browser-logs/
 # Config (keep credentials private)
 config.py
 
+# Stats (keep personal stats private)
+bot_stats.json
+
 # Test files
 test_*.py
 *_test.py
