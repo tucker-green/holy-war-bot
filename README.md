@@ -1,156 +1,175 @@
-# Holy War Game Bot
+# Holy War Bot 🤖⚔️
 
-An automated bot for the Holy War browser game that handles plundering, training, elixir buying, and player attacks.
+An automated bot for Holy War game that handles training, plundering, attacking, and resource management.
 
 ## Features
 
-- **Automatic Login**: Logs in with your credentials
-- **Plundering**: Automatically plunders every 10 minutes when plunder time is available
-- **Training**: Spends gold on training attributes while keeping a minimum reserve
-- **Elixir Banking**: Buys elixirs when gold exceeds 100 (and training is maxed out) to store value
-- **Player Attacks**: Attacks other players when plunder time runs out (5-minute cooldown)
-- **Smart Gold Management**: Keeps at least 10 gold at all times
+- ✅ **Auto Training** - Trains stats intelligently (prioritizes Strength, then cheapest)
+- ✅ **Auto Plundering** - Plunders for gold every 10 minutes
+- ✅ **Auto Attacking** - Attacks weaker players when plunder time is unavailable
+- ✅ **Smart Stats Comparison** - Only attacks opponents with lower total stats
+- ✅ **Elixir Management** - Automatically buys elixirs to avoid losing gold
+- ✅ **Gold Management** - Maintains minimum reserve for plundering
+- ✅ **Auto Re-login** - Automatically logs back in if session expires
+- ✅ **Progress Bars** - Visual feedback for waiting periods
+- ✅ **Cooldown Detection** - Detects and waits for active plundering/cooldowns
 
-## Installation
+## Quick Start (Local)
 
-1. **Install Python** (3.8 or higher recommended)
+### 1. Install Dependencies
 
-2. **Install dependencies**:
 ```bash
 pip install -r requirements.txt
+playwright install firefox
 ```
 
-3. **Install Playwright browsers**:
+### 2. Configure
+
 ```bash
-playwright install chromium
+cp config.example.py config.py
+nano config.py  # Edit with your credentials
 ```
+
+### 3. Run
+
+```bash
+python3 holy_war_bot.py
+```
+
+## Cloud Deployment (24/7)
+
+See [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) for detailed instructions on running the bot 24/7 in the cloud.
+
+**Quick Cloud Setup:**
+
+```bash
+# On your cloud server
+git clone https://github.com/tucker-green/holy-war-bot.git
+cd holy-war-bot
+./deploy.sh  # Automated setup script
+```
+
+### Recommended Cloud Providers
+
+| Provider | Cost | Best For |
+|----------|------|----------|
+| **Oracle Cloud** | FREE | Best value (free forever) |
+| **DigitalOcean** | $4/mo | Easiest setup |
+| **AWS EC2** | Free 12mo | Most flexible |
 
 ## Configuration
 
-1. Copy `config.example.py` to `config.py`:
-```bash
-cp config.example.py config.py  # Linux/Mac
-copy config.example.py config.py  # Windows
-```
-
-2. Edit the `config.py` file with your credentials:
+Edit `config.py`:
 
 ```python
 # Login credentials
-USERNAME = "your_username"  # Your game username
-PASSWORD = "your_password"  # Your game password
-WORLD = "17IN"              # Your world (e.g., "17IN" for International World 17)
+USERNAME = "your_username"
+PASSWORD = "your_password"
+WORLD = "17IN"  # Your world
 
 # Gold management
-MIN_GOLD_RESERVE = 10       # Minimum gold to keep at all times
-ELIXIR_THRESHOLD = 100      # Buy elixirs when gold exceeds this (and can't train)
+MIN_GOLD_RESERVE = 10       # Minimum gold to keep
+ELIXIR_THRESHOLD = 100      # Buy elixirs when gold > this
 
 # Plunder settings
-PLUNDER_DURATION_MINUTES = 10  # Duration of each plunder (10, 20, 30, 40, 50, or 60)
+PLUNDER_DURATION_MINUTES = 10  # 10, 20, 30, 40, 50, or 60
 
 # Attack settings
-TARGET_PLAYER_LEVEL = 1     # Level of players to attack
-ATTACK_COOLDOWN_MINUTES = 5 # Wait time between attacks
+TARGET_PLAYER_LEVEL = 3     # Level to attack
+ATTACK_COOLDOWN_MINUTES = 5 # Wait between attacks
 
 # Browser settings
-HEADLESS = False            # Set to True to run browser in background
+HEADLESS = False  # Set True for cloud deployment
 ```
 
-## Usage
+## Bot Logic Flow
 
-**Quick Start (Windows):**
+```
+1. Check if can train (and have > 10 gold left)
+   └─ YES: Train stats (Strength priority, then cheapest)
+   
+2. Check plunder time remaining
+   └─ >= 10 minutes?
+      ├─ YES: Check gold
+      │   ├─ >= 10 gold: Plunder → Wait 10 min → Collect gold
+      │   └─ < 10 gold: Sell elixir → Plunder
+      └─ NO: Attack player → Wait 5 min → Loop back to step 2
+```
+
+## Attack Strategy
+
+1. Get your current stats from attributes page
+2. Navigate to attack page and search for target level (exact or lower)
+3. Parse opponent's stats
+4. Compare total stats:
+   - **Opponent weaker**: Attack!
+   - **Opponent stronger**: Click "New Opponent" (try up to 10 times)
+5. Verify attack success by checking for cooldown timer
+
+## Monitoring
+
+### If using `screen`:
 ```bash
-run_bot.bat
+screen -r holywar  # Reattach to see live output
 ```
 
-**Quick Start (Linux/Mac):**
+### If using `systemd`:
 ```bash
-chmod +x run_bot.sh
-./run_bot.sh
-```
-
-**Or run directly:**
-```bash
-python holy_war_bot.py
-```
-
-The bot will:
-1. Login to your account
-2. Start plundering (10-minute cycles)
-3. After each plunder, train your attributes with available gold (SAFELY - see below)
-4. If gold > 100 and training is maxed, buy elixirs
-5. When plunder time runs out (after using all 120 minutes), switch to attacking other players
-6. Continue the cycle indefinitely
-
-### ⚠️ Important: Training Safety Logic
-
-**The bot will NOT train if training would leave you with ≤ 10 gold (or your configured MIN_GOLD_RESERVE).**
-
-Before clicking any "Train" button, the bot:
-1. Checks the training cost
-2. Calculates: `current_gold - training_cost`
-3. Only trains if the result is > MIN_GOLD_RESERVE
-
-This ensures you always keep your minimum gold reserve.
-
-**What happens if you can't train?**
-- If you have > 100 gold AND all stats are maxed → Buy elixirs (acts as a bank)
-- If you have < 100 gold → Continue plundering or attacking to earn more gold
-
-## How It Works
-
-### Plunder Phase
-- Bot checks if you have at least 10 minutes of plunder time
-- Starts a 10-minute plunder
-- Waits for plunder to complete
-- Goes to status page and trains attributes
-- If gold > 100 after training and can't train anymore, buys elixirs
-- Repeats until plunder time is exhausted
-
-### Attack Phase
-- When plunder time is depleted, bot switches to player attacks
-- Searches for players of your configured level
-- Attacks them with a 5-minute cooldown between attacks
-- Checks periodically if plunder time has refreshed (new day)
-
-## Stopping the Bot
-
-Press `Ctrl+C` to stop the bot gracefully.
-
-## Notes
-
-- The bot runs in non-headless mode by default (you can see the browser window)
-- All actions are logged with timestamps
-- Make sure you have a stable internet connection
-- The bot respects game timers and cooldowns
-
-## Workflow Summary
-
-```
-Login → Check Plunder Time Available?
-  ├─ YES → Plunder (10 min)
-  │         ↓
-  │       Wait 10 minutes
-  │         ↓
-  │       Train Attributes (spend gold, keep > 10)
-  │         ↓
-  │       Gold > 100 & Can't Train? → Buy Elixirs
-  │         ↓
-  │       Repeat
-  │
-  └─ NO → Attack Players (level configurable)
-            ↓
-          Wait 5 minutes
-            ↓
-          Check if Plunder Time Refreshed?
-            ↓
-          Repeat
+sudo systemctl status holywar-bot  # Check status
+sudo journalctl -u holywar-bot -f  # Follow logs
 ```
 
 ## Troubleshooting
 
-- **Bot can't login**: Check your credentials in the script
-- **Bot can't find elements**: The game might have updated its UI, you may need to update the selectors
-- **Bot stops unexpectedly**: Check the logs for error messages
-- **Playwright errors**: Make sure you ran `playwright install chromium`
+### Bot stops working
+```bash
+# Check logs
+sudo journalctl -u holywar-bot -n 100
 
+# Restart
+sudo systemctl restart holywar-bot
+```
+
+### Update bot
+```bash
+cd ~/holy-war-bot
+git pull origin main
+sudo systemctl restart holywar-bot
+```
+
+### Memory issues
+```bash
+# Add swap space (if < 1GB RAM)
+sudo fallocate -l 1G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+## Files
+
+- `holy_war_bot.py` - Main bot logic
+- `config.py` - Your configuration (not in git)
+- `config.example.py` - Example configuration
+- `requirements.txt` - Python dependencies
+- `deploy.sh` - Automated cloud deployment script
+- `holywar-bot.service` - Systemd service file
+- `DEPLOYMENT_GUIDE.md` - Detailed cloud deployment guide
+
+## Security
+
+- ⚠️ Never commit `config.py` (it contains your password)
+- ⚠️ Use SSH keys for cloud servers
+- ⚠️ Keep your server updated: `sudo apt update && sudo apt upgrade`
+
+## License
+
+MIT License - Use at your own risk. This bot is for educational purposes.
+
+## Contributing
+
+Pull requests welcome! Please test thoroughly before submitting.
+
+---
+
+Made with ❤️ by Tucker Green
