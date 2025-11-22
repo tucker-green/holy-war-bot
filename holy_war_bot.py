@@ -614,7 +614,13 @@ class HolyWarBot:
                         if plunder_success:
                             logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
                             await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)")
-                            logger.info("Plunder complete! Looping back to training check...")
+                            logger.info("Plunder complete! Collecting gold...")
+                            
+                            # Go back to attack page to collect the gold
+                            await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
+                            await asyncio.sleep(3)
+                            logger.info("Gold collected! Looping back to training check...")
+                            
                             # Loop back to STEP 1 (training check)
                             continue
                     else:
@@ -630,7 +636,13 @@ class HolyWarBot:
                             if plunder_success:
                                 logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
                                 await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)")
-                                logger.info("Plunder complete! Looping back to training check...")
+                                logger.info("Plunder complete! Collecting gold...")
+                                
+                                # Go back to attack page to collect the gold
+                                await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
+                                await asyncio.sleep(3)
+                                logger.info("Gold collected! Looping back to training check...")
+                                
                                 # Loop back to STEP 1 (training check)
                                 continue
                         else:
