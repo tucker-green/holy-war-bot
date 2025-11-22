@@ -926,6 +926,10 @@ async def main():
 
 if __name__ == "__main__":
     import threading
+    import os
+    
+    # Suppress macOS Tk deprecation warning
+    os.environ['TK_SILENCE_DEPRECATION'] = '1'
     
     # Start dashboard in main thread
     dashboard = get_dashboard()
