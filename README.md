@@ -4,12 +4,26 @@ An automated bot for the Holy War browser game that handles plundering, training
 
 ## Features
 
-- **Automatic Login**: Logs in with your credentials
+### 🎮 Core Gameplay
+- **Automatic Login**: Logs in with your credentials & auto-recovers from logouts
 - **Plundering**: Automatically plunders every 10 minutes when plunder time is available
 - **Training**: Spends gold on training attributes while keeping a minimum reserve
-- **Elixir Banking**: Buys elixirs when gold exceeds 100 (and training is maxed out) to store value
+- **Elixir Banking**: Buys elixirs when gold exceeds 65 (and training is maxed out) to store value
 - **Player Attacks**: Attacks other players when plunder time runs out (5-minute cooldown)
 - **Smart Gold Management**: Keeps at least 10 gold at all times
+
+### 📊 Dashboard & Statistics
+- **Real-Time Desktop Dashboard**: Native GUI showing live bot status, stats, gold, and progress
+- **Progress Bars**: Visual progress tracking for plunder and attack cooldowns
+- **Comprehensive Stats Tracking**: 
+  - Gold earned vs spent (with breakdown)
+  - Stat upgrades (which stats, how many times)
+  - Elixir purchases (types, costs, counts)
+  - Combat results (victories/defeats)
+  - Activity metrics (plunders, attacks, training sessions)
+- **Persistent Stats**: All statistics saved to `bot_stats.json` and persist across restarts
+
+See [Dashboard Documentation](README_DASHBOARD.md) and [Statistics Documentation](README_STATS.md) for details!
 
 ## Installation
 
@@ -75,12 +89,16 @@ python holy_war_bot.py
 ```
 
 The bot will:
-1. Login to your account
-2. Start plundering (10-minute cycles)
-3. After each plunder, train your attributes with available gold (SAFELY - see below)
-4. If gold > 100 and training is maxed, buy elixirs
-5. When plunder time runs out (after using all 120 minutes), switch to attacking other players
-6. Continue the cycle indefinitely
+1. **Open the Desktop Dashboard** (always-on-top window)
+2. Login to your account
+3. Start plundering (10-minute cycles)
+4. After each plunder, train your attributes with available gold (SAFELY - see below)
+5. If gold > 65 and training is maxed, buy elixirs
+6. When plunder time runs out (after using all 120 minutes), switch to attacking other players
+7. Continue the cycle indefinitely
+8. **Track all stats in real-time** (gold, upgrades, purchases, combat)
+
+The dashboard will show you everything happening in real-time! 📈
 
 ### ⚠️ Important: Training Safety Logic
 
