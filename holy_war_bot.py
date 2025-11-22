@@ -95,12 +95,11 @@ class HolyWarBot:
     async def start(self, headless=False):
         """Initialize browser and start bot"""
         try:
-            # Start dashboard
+            # Get dashboard reference (already started in main thread)
             self.dashboard = get_dashboard()
-            self.dashboard.start()
-            self.dashboard.update_status("Starting")
-            self.dashboard.update_action("Initializing browser...")
-            await asyncio.sleep(0.5)  # Give dashboard time to appear
+            self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Starting"))
+            self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Initializing browser..."))
+            await asyncio.sleep(0.5)  # Give dashboard time to update
             
             logger.info("Starting Playwright...")
             self.playwright = await async_playwright().start()
@@ -926,5 +925,20 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import threading
+    
+    # Start dashboard in main thread
+    dashboard = get_dashboard()
+    dashboard.update_status("Starting")
+    dashboard.update_action("Initializing...")
+    
+    # Run bot in background thread
+    def run_bot():
+        asyncio.run(main())
+    
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+    
+    # Run dashboard in main thread (required for macOS)
+    dashboard.run()
 

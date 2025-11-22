@@ -277,12 +277,13 @@ class BotDashboard:
         self.update_time_label.config(text=f"Last update: {self.data['last_update']}")
         
     def start(self):
-        """Start the dashboard (non-blocking)"""
-        def run():
-            self.root.mainloop()
-        
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
+        """Start the dashboard in the main thread"""
+        # This should be called from the main thread
+        pass
+    
+    def run(self):
+        """Run the dashboard mainloop (must be called from main thread)"""
+        self.root.mainloop()
         
     def update_in_thread(self, func):
         """Schedule an update in the main thread"""
