@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 import logging
 import config
+from tqdm import tqdm
 
 # Setup logging
 logging.basicConfig(
@@ -16,6 +17,16 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+async def wait_with_progress_bar(minutes: int, description: str):
+    """Wait with a visual progress bar showing remaining time"""
+    total_seconds = minutes * 60
+    
+    with tqdm(total=total_seconds, desc=description, unit="s", bar_format='{desc}: {bar} {percentage:3.0f}% | {n_fmt}/{total_fmt}s | Remaining: {remaining}') as pbar:
+        for i in range(total_seconds):
+            await asyncio.sleep(1)
+            pbar.update(1)
 
 
 class HolyWarBot:
@@ -602,7 +613,7 @@ class HolyWarBot:
                         
                         if plunder_success:
                             logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                            await asyncio.sleep(self.plunder_duration_minutes * 60)
+                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)")
                             logger.info("Plunder complete! Looping back to training check...")
                             # Loop back to STEP 1 (training check)
                             continue
@@ -618,7 +629,7 @@ class HolyWarBot:
                             
                             if plunder_success:
                                 logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                                await asyncio.sleep(self.plunder_duration_minutes * 60)
+                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)")
                                 logger.info("Plunder complete! Looping back to training check...")
                                 # Loop back to STEP 1 (training check)
                                 continue
@@ -646,7 +657,7 @@ class HolyWarBot:
                     await self.attack_player()
                     
                     logger.info(f"Waiting {self.attack_cooldown_minutes} minutes for attack cooldown...")
-                    await asyncio.sleep(self.attack_cooldown_minutes * 60)
+                    await wait_with_progress_bar(self.attack_cooldown_minutes, f"Attack Cooldown ({self.attack_cooldown_minutes} min)")
                     
                     # Loop back to STEP 2 (check plunder time)
                     continue
