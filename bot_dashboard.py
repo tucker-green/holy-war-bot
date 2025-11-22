@@ -253,6 +253,7 @@ class BotDashboard(BoxLayout):
         Clock.schedule_once(lambda dt: self._do_update_status(status), 0)
     
     def _do_update_status(self, status):
+        print(f"[DASHBOARD] Updating status: {status}")
         self.status_label.text = f'[color=00ff00]Status: {status}[/color]'
         self._update_time()
     
@@ -271,6 +272,7 @@ class BotDashboard(BoxLayout):
         Clock.schedule_once(lambda dt: self._do_update_gold(gold), 0)
     
     def _do_update_gold(self, gold):
+        print(f"[DASHBOARD] Updating gold: {gold}")
         self.gold_label.text = f'[color=ffd700]💰 Gold: {gold}[/color]'
         self._update_time()
     
