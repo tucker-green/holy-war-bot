@@ -108,6 +108,8 @@ class HolyWarBot:
             if self.dashboard is None:
                 logger.warning("Dashboard not available, continuing without UI")
             else:
+                print(f"[BOT] Dashboard is available: {self.dashboard}")
+                logger.info("Updating dashboard status...")
                 self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Starting"))
                 self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Initializing browser..."))
                 
@@ -272,6 +274,7 @@ class HolyWarBot:
         if "/welcome" in self.page.url or "/char/attributes" in self.page.url:
             logger.info("Logged in successfully")
             if self.dashboard:
+                print("[BOT] Updating dashboard with login status...")
                 self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Online"))
                 self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Logged in"))
         else:
@@ -322,6 +325,7 @@ class HolyWarBot:
                     gold = int(text.strip())
                     logger.info(f"Current gold: {gold}")
                     if self.dashboard:
+                        print(f"[BOT] Calling dashboard.update_gold({gold})")
                         self.dashboard.update_in_thread(lambda g=gold: self.dashboard.update_gold(g))
                     return gold
             
