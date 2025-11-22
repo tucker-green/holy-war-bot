@@ -250,7 +250,7 @@ class BotDashboard(BoxLayout):
     def update_status(self, status):
         """Update bot status"""
         self.data['status'] = status
-        Clock.schedule_once(lambda dt: self._do_update_status(status))
+        Clock.schedule_once(lambda dt: self._do_update_status(status), 0)
     
     def _do_update_status(self, status):
         self.status_label.text = f'[color=00ff00]Status: {status}[/color]'
@@ -259,7 +259,7 @@ class BotDashboard(BoxLayout):
     def update_action(self, action):
         """Update current action"""
         self.data['current_action'] = action
-        Clock.schedule_once(lambda dt: self._do_update_action(action))
+        Clock.schedule_once(lambda dt: self._do_update_action(action), 0)
     
     def _do_update_action(self, action):
         self.action_label.text = f'[color=cccccc]Action: {action}[/color]'
@@ -268,7 +268,7 @@ class BotDashboard(BoxLayout):
     def update_gold(self, gold):
         """Update gold amount"""
         self.data['gold'] = gold
-        Clock.schedule_once(lambda dt: self._do_update_gold(gold))
+        Clock.schedule_once(lambda dt: self._do_update_gold(gold), 0)
     
     def _do_update_gold(self, gold):
         self.gold_label.text = f'[color=ffd700]💰 Gold: {gold}[/color]'
@@ -277,7 +277,7 @@ class BotDashboard(BoxLayout):
     def update_level(self, level):
         """Update level"""
         self.data['level'] = level
-        Clock.schedule_once(lambda dt: self._do_update_level(level))
+        Clock.schedule_once(lambda dt: self._do_update_level(level), 0)
     
     def _do_update_level(self, level):
         self.level_label.text = f'[color=00d4ff]⭐ Level: {level}[/color]'
@@ -285,7 +285,7 @@ class BotDashboard(BoxLayout):
     
     def update_stats(self, **stats):
         """Update character stats"""
-        Clock.schedule_once(lambda dt: self._do_update_stats(stats))
+        Clock.schedule_once(lambda dt: self._do_update_stats(stats), 0)
     
     def _do_update_stats(self, stats):
         for stat, value in stats.items():
@@ -297,7 +297,7 @@ class BotDashboard(BoxLayout):
     def update_plunder_time(self, minutes):
         """Update plunder time remaining"""
         self.data['plunder_time_remaining'] = minutes
-        Clock.schedule_once(lambda dt: self._do_update_plunder_time(minutes))
+        Clock.schedule_once(lambda dt: self._do_update_plunder_time(minutes), 0)
     
     def _do_update_plunder_time(self, minutes):
         self.plunder_time_label.text = f'[color=cccccc]Time Remaining: {minutes} min[/color]'
@@ -305,7 +305,7 @@ class BotDashboard(BoxLayout):
     
     def update_plunder_progress(self, current, total):
         """Update plunder progress bar"""
-        Clock.schedule_once(lambda dt: self._do_update_plunder_progress(current, total))
+        Clock.schedule_once(lambda dt: self._do_update_plunder_progress(current, total), 0)
     
     def _do_update_plunder_progress(self, current, total):
         if total > 0:
@@ -319,7 +319,7 @@ class BotDashboard(BoxLayout):
     
     def update_statistics(self, stats_data):
         """Update the statistics display"""
-        Clock.schedule_once(lambda dt: self._do_update_statistics(stats_data))
+        Clock.schedule_once(lambda dt: self._do_update_statistics(stats_data), 0)
     
     def _do_update_statistics(self, stats_data):
         # Clear existing stats
@@ -377,7 +377,7 @@ class BotDashboard(BoxLayout):
     
     def update_in_thread(self, func):
         """Schedule an update in the main thread"""
-        Clock.schedule_once(lambda dt: func())
+        Clock.schedule_once(lambda dt: func(), 0)
 
 
 class DashboardApp(App):
