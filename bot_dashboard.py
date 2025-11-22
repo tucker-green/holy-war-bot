@@ -13,7 +13,7 @@ class BotDashboard:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Holy War Bot Dashboard")
-        self.root.geometry("400x600+0+0")  # Position at top-left
+        self.root.geometry("450x800+0+0")  # Increased size for stats
         self.root.configure(bg='#1e1e1e')
         
         # Keep window on top
@@ -212,6 +212,37 @@ class BotDashboard:
         )
         self.progress_label.pack()
         
+        # Statistics Frame (Scrollable)
+        stats_frame = tk.LabelFrame(
+            self.root,
+            text="Session Statistics",
+            font=('Arial', 12, 'bold'),
+            bg='#2d2d2d',
+            fg='#ffffff',
+            padx=10,
+            pady=10
+        )
+        stats_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # Create scrollable canvas for stats
+        canvas = tk.Canvas(stats_frame, bg='#2d2d2d', highlightthickness=0)
+        scrollbar = tk.Scrollbar(stats_frame, orient='vertical', command=canvas.yview)
+        self.stats_content = tk.Frame(canvas, bg='#2d2d2d')
+        
+        self.stats_content.bind(
+            '<Configure>',
+            lambda e: canvas.configure(scrollregion=canvas.bbox('all'))
+        )
+        
+        canvas.create_window((0, 0), window=self.stats_content, anchor='nw')
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
+        
+        # Stats labels (will be populated)
+        self.stats_labels = {}
+        
         # Last Update
         self.update_time_label = tk.Label(
             self.root,
@@ -275,6 +306,86 @@ class BotDashboard:
         """Update last update timestamp"""
         self.data['last_update'] = datetime.now().strftime('%H:%M:%S')
         self.update_time_label.config(text=f"Last update: {self.data['last_update']}")
+    
+    def update_statistics(self, stats_data):
+        """Update the statistics display"""
+        # Clear existing stats
+        for widget in self.stats_content.winfo_children():
+            widget.destroy()
+        
+        # Gold Summary
+        self._add_stats_section("💰 Gold", [
+            f"Earned: {stats_data.get('gold_earned', 0):,}g",
+            f"Spent: {stats_data.get('gold_spent', 0):,}g",
+            f"Net: {stats_data.get('gold_net', 0):,}g",
+            f"On Stats: {stats_data.get('gold_on_stats', 0):,}g",
+            f"On Elixirs: {stats_data.get('gold_on_elixirs', 0):,}g"
+        ])
+        
+        # Stat Upgrades
+        upgrades = stats_data.get('stat_upgrades', {})
+        self._add_stats_section("⬆️ Stat Upgrades", [
+            f"Strength: {upgrades.get('strength', 0)}x",
+            f"Attack: {upgrades.get('attack', 0)}x",
+            f"Defence: {upgrades.get('defence', 0)}x",
+            f"Agility: {upgrades.get('agility', 0)}x",
+            f"Stamina: {upgrades.get('stamina', 0)}x",
+            f"Total: {stats_data.get('total_trainings', 0)} trainings"
+        ])
+        
+        # Elixirs
+        elixirs = stats_data.get('elixirs', {})
+        self._add_stats_section("🧪 Elixirs", [
+            f"Consecrated (50g): {elixirs.get('consecrated_count', 0)}x = {elixirs.get('consecrated_cost', 0)}g",
+            f"Baptised (90g): {elixirs.get('baptised_count', 0)}x = {elixirs.get('baptised_cost', 0)}g",
+            f"Blessed (450g): {elixirs.get('blessed_count', 0)}x = {elixirs.get('blessed_cost', 0)}g"
+        ])
+        
+        # Combat
+        self._add_stats_section("⚔️ Combat", [
+            f"Victories: {stats_data.get('victories', 0)}",
+            f"Defeats: {stats_data.get('defeats', 0)}",
+            f"Win Rate: {stats_data.get('win_rate', 0):.1f}%"
+        ])
+        
+        # Activity
+        self._add_stats_section("📊 Activity", [
+            f"Plunders: {stats_data.get('plunders', 0)}",
+            f"Plunder Time: {stats_data.get('plunder_hours', 0):.1f}h",
+            f"Attacks: {stats_data.get('attacks', 0)}",
+            f"Training Sessions: {stats_data.get('training_sessions', 0)}"
+        ])
+        
+        self._update_time()
+    
+    def _add_stats_section(self, title, items):
+        """Add a section of stats"""
+        # Section title
+        title_label = tk.Label(
+            self.stats_content,
+            text=title,
+            font=('Arial', 10, 'bold'),
+            bg='#2d2d2d',
+            fg='#00d4ff',
+            anchor='w'
+        )
+        title_label.pack(fill='x', pady=(5, 2))
+        
+        # Items
+        for item in items:
+            item_label = tk.Label(
+                self.stats_content,
+                text=f"  {item}",
+                font=('Arial', 9),
+                bg='#2d2d2d',
+                fg='#cccccc',
+                anchor='w'
+            )
+            item_label.pack(fill='x', pady=1)
+        
+        # Separator
+        separator = tk.Frame(self.stats_content, height=1, bg='#444444')
+        separator.pack(fill='x', pady=5)
         
     def start(self):
         """Start the dashboard in the main thread"""

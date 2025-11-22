@@ -11,6 +11,7 @@ import logging
 import config
 from tqdm import tqdm
 from bot_dashboard import get_dashboard
+from bot_stats import get_stats
 
 # Setup logging
 logging.basicConfig(
@@ -79,6 +80,7 @@ class HolyWarBot:
         self.playwright: Playwright = None
         self.context = None
         self.dashboard = None
+        self.stats = get_stats()
         
         # Configuration
         self.min_gold_reserve = 20
@@ -159,6 +161,50 @@ class HolyWarBot:
         """Close browser and cleanup"""
         await self._cleanup()
         logger.info("Bot stopped")
+    
+    def _update_dashboard_stats(self):
+        """Update dashboard with current statistics"""
+        if not self.dashboard:
+            return
+        
+        gold_summary = self.stats.get_gold_summary()
+        stat_upgrades = self.stats.get_stat_upgrades()
+        elixir_summary = self.stats.get_elixir_summary()
+        combat_summary = self.stats.get_combat_summary()
+        activity_summary = self.stats.get_activity_summary()
+        
+        stats_data = {
+            'gold_earned': gold_summary['earned'],
+            'gold_spent': gold_summary['spent'],
+            'gold_net': gold_summary['net'],
+            'gold_on_stats': gold_summary['on_stats'],
+            'gold_on_elixirs': gold_summary['on_elixirs'],
+            'stat_upgrades': stat_upgrades,
+            'total_trainings': self.stats.stats['total_trainings'],
+            'consecrated_count': elixir_summary['consecrated']['count'],
+            'consecrated_cost': elixir_summary['consecrated']['total_cost'],
+            'baptised_count': elixir_summary['baptised']['count'],
+            'baptised_cost': elixir_summary['baptised']['total_cost'],
+            'blessed_count': elixir_summary['blessed']['count'],
+            'blessed_cost': elixir_summary['blessed']['total_cost'],
+            'elixirs': {
+                'consecrated_count': elixir_summary['consecrated']['count'],
+                'consecrated_cost': elixir_summary['consecrated']['total_cost'],
+                'baptised_count': elixir_summary['baptised']['count'],
+                'baptised_cost': elixir_summary['baptised']['total_cost'],
+                'blessed_count': elixir_summary['blessed']['count'],
+                'blessed_cost': elixir_summary['blessed']['total_cost'],
+            },
+            'victories': combat_summary['victories'],
+            'defeats': combat_summary['defeats'],
+            'win_rate': combat_summary['win_rate'],
+            'plunders': activity_summary['plunders'],
+            'plunder_hours': activity_summary['plunder_hours'],
+            'attacks': activity_summary['attacks'],
+            'training_sessions': activity_summary['training_sessions']
+        }
+        
+        self.dashboard.update_in_thread(lambda: self.dashboard.update_statistics(stats_data))
         
     async def is_logged_in(self) -> bool:
         """Check if currently logged in"""
@@ -339,9 +385,13 @@ class HolyWarBot:
             logger.info(f"Plunder started! Will complete in {self.plunder_duration_minutes} minutes")
             logger.info(f"Plunder time remaining: {self.plunder_time_remaining} minutes")
             
+            # Track plunder
+            self.stats.add_plunder(self.plunder_duration_minutes)
+            
             if self.dashboard:
                 self.dashboard.update_in_thread(lambda: self.dashboard.update_action(f"Plundering ({self.plunder_duration_minutes} min)"))
                 self.dashboard.update_in_thread(lambda: self.dashboard.update_plunder_time(self.plunder_time_remaining))
+                self._update_dashboard_stats()
             
             return True
             
@@ -466,7 +516,15 @@ class HolyWarBot:
                 trained_something = True
                 training_count += 1
                 
+                # Track stat upgrade
+                stat_names = ["strength", "attack", "defence", "agility", "stamina"]
+                stat_name = stat_names[train_index] if train_index < len(stat_names) else "unknown"
+                self.stats.add_gold_spent_on_stat(stat_name, actual_cost)
+                
                 logger.info(f"Training #{training_count} - Cost: {actual_cost} gold. Remaining gold: {current_gold}")
+                
+                # Update dashboard with new stats
+                self._update_dashboard_stats()
                     
             except Exception as e:
                 logger.error(f"Error during training: {e}")
@@ -475,6 +533,7 @@ class HolyWarBot:
                 break
                 
         if trained_something:
+            self.stats.add_training_session()
             logger.info(f"Completed {training_count} trainings. Final gold: {current_gold}")
         else:
             logger.info("No training was possible")
@@ -595,7 +654,14 @@ class HolyWarBot:
                     bought_something = True
                     actual_cost = current_gold - new_gold
                     current_gold = new_gold
+                    
+                    # Track elixir purchase
+                    self.stats.add_gold_spent_on_elixir(elixir_name, actual_cost)
+                    
                     logger.info(f"Bought {elixir_name} for {actual_cost} gold. Remaining: {current_gold}")
+                    
+                    # Update dashboard
+                    self._update_dashboard_stats()
                     
                     # If we're below 50 gold, stop
                     if current_gold < 50:
@@ -826,6 +892,9 @@ class HolyWarBot:
                         plunder_success = await self.do_plunder()
                         
                         if plunder_success:
+                            # Track gold before plunder
+                            gold_before = current_gold
+                            
                             logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
                             await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
                             logger.info("Plunder complete! Collecting gold...")
@@ -833,7 +902,16 @@ class HolyWarBot:
                             # Go back to attack page to collect the gold
                             await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                             await asyncio.sleep(3)
-                            logger.info("Gold collected! Looping back to training check...")
+                            
+                            # Track gold earned
+                            gold_after = await self.get_current_gold()
+                            gold_earned = gold_after - gold_before
+                            if gold_earned > 0:
+                                self.stats.add_gold_earned(gold_earned)
+                                logger.info(f"Gold collected! Earned {gold_earned} gold from plunder")
+                                self._update_dashboard_stats()
+                            else:
+                                logger.info("Gold collected! Looping back to training check...")
                             
                             # Loop back to STEP 1 (training check)
                             continue
@@ -848,6 +926,9 @@ class HolyWarBot:
                             plunder_success = await self.do_plunder()
                             
                             if plunder_success:
+                                # Track gold before plunder
+                                gold_before_plunder = await self.get_current_gold()
+                                
                                 logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
                                 await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes, self.dashboard)
                                 logger.info("Plunder complete! Collecting gold...")
@@ -855,7 +936,16 @@ class HolyWarBot:
                                 # Go back to attack page to collect the gold
                                 await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                                 await asyncio.sleep(3)
-                                logger.info("Gold collected! Looping back to training check...")
+                                
+                                # Track gold earned
+                                gold_after_plunder = await self.get_current_gold()
+                                gold_earned_plunder = gold_after_plunder - gold_before_plunder
+                                if gold_earned_plunder > 0:
+                                    self.stats.add_gold_earned(gold_earned_plunder)
+                                    logger.info(f"Gold collected! Earned {gold_earned_plunder} gold from plunder")
+                                    self._update_dashboard_stats()
+                                else:
+                                    logger.info("Gold collected! Looping back to training check...")
                                 
                                 # Loop back to STEP 1 (training check)
                                 continue
@@ -880,7 +970,10 @@ class HolyWarBot:
                     
                     # Attack a player, wait 5 minutes, then check plunder time again
                     logger.info("Attacking a player...")
-                    await self.attack_player()
+                    attack_result = await self.attack_player()
+                    if attack_result:
+                        self.stats.add_attack()
+                        self._update_dashboard_stats()
                     
                     logger.info(f"Waiting {self.attack_cooldown_minutes} minutes for attack cooldown...")
                     await wait_with_progress_bar(self.attack_cooldown_minutes, f"Attack Cooldown ({self.attack_cooldown_minutes} min)", None, self.dashboard)
