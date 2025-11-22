@@ -101,6 +101,10 @@ class HolyWarBot:
             self.dashboard = get_dashboard()
             self.dashboard.update_in_thread(lambda: self.dashboard.update_status("Starting"))
             self.dashboard.update_in_thread(lambda: self.dashboard.update_action("Initializing browser..."))
+            
+            # Initialize statistics display
+            self._update_dashboard_stats()
+            
             await asyncio.sleep(0.5)  # Give dashboard time to update
             
             logger.info("Starting Playwright...")
