@@ -574,11 +574,15 @@ class HolyWarBot:
         
         try:
             # Fill in search criteria
-            # Look for level input field
+            # Select "Exact or lower" from the dropdown
+            await self.page.select_option('select[name="searchtype"]', 'lower')
+            await asyncio.sleep(0.5)
+            
+            # Fill in level input field
             await self.page.fill('input[name="level"]', str(self.target_player_level))
             
             # Click search button
-            await self.page.click('input[type="submit"][value*="Search"], input[type="image"][alt*="Search"]')
+            await self.page.click('button[name="Search"]')
             await asyncio.sleep(2)
             
             # Click attack button on first player in results
