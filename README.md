@@ -27,7 +27,13 @@ playwright install chromium
 
 ## Configuration
 
-Edit the `config.py` file to configure your settings:
+1. Copy `config.example.py` to `config.py`:
+```bash
+cp config.example.py config.py  # Linux/Mac
+copy config.example.py config.py  # Windows
+```
+
+2. Edit the `config.py` file with your credentials:
 
 ```python
 # Login credentials
