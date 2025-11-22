@@ -574,11 +574,65 @@ class HolyWarBot:
         
         return can_train
     
+    async def check_active_plunder(self):
+        """Check if already plundering and wait for it to complete"""
+        try:
+            # Go to attack page to check status
+            await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
+            await asyncio.sleep(2)
+            
+            content = await self.page.content()
+            
+            if "You're now plundering" in content or "You're now protecting" in content:
+                logger.info("Detected active plunder/protection!")
+                
+                # Try to extract the remaining time from the countdown
+                import re
+                # Look for countdown timer like "0:07:04"
+                countdown_match = re.search(r'<span id="counter\d+">(\d+):(\d+):(\d+)</span>', content)
+                
+                if countdown_match:
+                    hours = int(countdown_match.group(1))
+                    minutes = int(countdown_match.group(2))
+                    seconds = int(countdown_match.group(3))
+                    total_minutes = hours * 60 + minutes + (1 if seconds > 0 else 0)
+                    
+                    logger.info(f"Plunder will complete in {hours}h {minutes}m {seconds}s ({total_minutes} minutes)")
+                    logger.info(f"Waiting for plunder to complete...")
+                    
+                    # Wait for the plunder to complete with progress bar
+                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes} min)")
+                    
+                    # After waiting, go back to attack page to collect gold
+                    logger.info("Active plunder complete! Collecting gold...")
+                    await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
+                    await asyncio.sleep(3)
+                    logger.info("Gold collected!")
+                    return True
+                else:
+                    logger.warning("Found active plunder but couldn't parse countdown. Waiting 5 minutes...")
+                    await wait_with_progress_bar(5, "Waiting for active plunder (5 min)")
+                    await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
+                    await asyncio.sleep(2)
+                    return True
+            
+            logger.info("No active plunder detected. Ready to start!")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error checking active plunder: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return False
+    
     async def run(self):
         """Main bot loop - follows the exact flowchart logic"""
         try:
             await self.start(headless=config.HEADLESS)
             await self.login()
+            
+            # Check if already plundering before starting main loop
+            await self.check_active_plunder()
             
             # Main game loop - follows flowchart exactly
             while True:
