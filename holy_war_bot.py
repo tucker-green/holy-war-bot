@@ -19,14 +19,35 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def wait_with_progress_bar(minutes: int, description: str):
-    """Wait with a visual progress bar showing remaining time"""
-    total_seconds = minutes * 60
+async def wait_with_progress_bar(minutes: int, description: str, total_duration_minutes: int = None):
+    """Wait with a visual progress bar showing remaining time
     
-    with tqdm(total=total_seconds, desc=description, unit="s", bar_format='{desc}: {bar} {percentage:3.0f}% | {n_fmt}/{total_fmt}s | Remaining: {remaining}') as pbar:
-        for i in range(total_seconds):
-            await asyncio.sleep(1)
-            pbar.update(1)
+    Args:
+        minutes: Time to wait in minutes
+        description: Description for the progress bar
+        total_duration_minutes: Total duration in minutes (for calculating percentage). 
+                               If provided, shows progress relative to total duration.
+    """
+    wait_seconds = minutes * 60
+    
+    if total_duration_minutes:
+        # Calculate progress relative to total duration
+        total_seconds = total_duration_minutes * 60
+        elapsed_seconds = total_seconds - wait_seconds
+        
+        with tqdm(total=total_seconds, desc=description, unit="s", 
+                 bar_format='{desc}: {bar} {percentage:3.0f}% | {elapsed}/{total}s',
+                 initial=elapsed_seconds) as pbar:
+            for i in range(wait_seconds):
+                await asyncio.sleep(1)
+                pbar.update(1)
+    else:
+        # Standard progress bar (0% to 100% for the wait time)
+        with tqdm(total=wait_seconds, desc=description, unit="s", 
+                 bar_format='{desc}: {bar} {percentage:3.0f}% | {n_fmt}/{total_fmt}s') as pbar:
+            for i in range(wait_seconds):
+                await asyncio.sleep(1)
+                pbar.update(1)
 
 
 class HolyWarBot:
@@ -601,7 +622,8 @@ class HolyWarBot:
                     logger.info(f"Waiting for plunder to complete...")
                     
                     # Wait for the plunder to complete with progress bar
-                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes} min)")
+                    # Show progress relative to plunder duration
+                    await wait_with_progress_bar(total_minutes, f"Waiting for active plunder ({total_minutes}/{self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
                     
                     # After waiting, go back to attack page to collect gold
                     logger.info("Active plunder complete! Collecting gold...")
@@ -611,7 +633,7 @@ class HolyWarBot:
                     return True
                 else:
                     logger.warning("Found active plunder but couldn't parse countdown. Waiting 5 minutes...")
-                    await wait_with_progress_bar(5, "Waiting for active plunder (5 min)")
+                    await wait_with_progress_bar(5, "Waiting for active plunder (5/10 min)", self.plunder_duration_minutes)
                     await self.page.goto(f"{self.base_url}/assault/1on1/?w={self.world}")
                     await asyncio.sleep(2)
                     return True
@@ -667,7 +689,7 @@ class HolyWarBot:
                         
                         if plunder_success:
                             logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)")
+                            await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
                             logger.info("Plunder complete! Collecting gold...")
                             
                             # Go back to attack page to collect the gold
@@ -689,7 +711,7 @@ class HolyWarBot:
                             
                             if plunder_success:
                                 logger.info(f"Plundering for {self.plunder_duration_minutes} minutes...")
-                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)")
+                                await wait_with_progress_bar(self.plunder_duration_minutes, f"Plundering ({self.plunder_duration_minutes} min)", self.plunder_duration_minutes)
                                 logger.info("Plunder complete! Collecting gold...")
                                 
                                 # Go back to attack page to collect the gold
